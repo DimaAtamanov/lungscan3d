@@ -6,8 +6,6 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-import tritonclient.http as httpclient
-from tritonclient.utils import np_to_triton_dtype
 
 LOGGER = logging.getLogger(__name__)
 
@@ -23,6 +21,9 @@ def call_triton(config: Any, input: str) -> None:
 
     """
     LOGGER.info("Calling Triton server: url=%s, input=%s", config.triton_client, input)
+
+    import tritonclient.http as httpclient
+    from tritonclient.utils import np_to_triton_dtype
 
     patch = np.load(Path(input)).astype(np.float32)
     if patch.ndim == 4:
