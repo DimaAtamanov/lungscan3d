@@ -2,7 +2,9 @@ spacing_mm: [1.0, 1.0, 1.0]
 clip_hu_min: -1000.0
 clip_hu_max: 400.0
 normalize_to: [-1.0, 1.0]
+chunk_size: 512
 cache_processed_patches: true
+max_cached_ct_volumes: 1
 augment:
   enabled: true
   random_flip: true

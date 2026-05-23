@@ -1,5 +1,7 @@
 """PyTorch Lightning data module."""
 
+from __future__ import annotations
+
 import logging
 from pathlib import Path
 from typing import Any
@@ -13,7 +15,14 @@ try:
 except ImportError:  # pragma: no cover
     pl = None  # type: ignore[assignment]
 
-from lungscan3d.data.dataset import AugmentationConfig, PatchDataset, load_patch_arrays
+from lungscan3d.data.dataset import (
+    AugmentationConfig,
+    LazyChunkedPatchDataset,
+    PatchDataset,
+    has_chunked_patch_arrays,
+    load_patch_arrays,
+    load_patch_labels,
+)
 from lungscan3d.data.download import download_data
 from lungscan3d.data.preprocessing import preprocess
 from lungscan3d.data.splits import split_indices
@@ -25,18 +34,12 @@ class LungScanDataModule(pl.LightningDataModule if pl is not None else object):
     """Lightning data module for synthetic and preprocessed LungScan3D datasets."""
 
     def __init__(self, config: Any) -> None:
-        """Initialize data module.
-
-        Args:
-        ----
-            config: Hydra configuration object.
-
-        """
+        """Initialize data module."""
         super().__init__()
         self.config = config
-        self.train_dataset: PatchDataset | None = None
-        self.val_dataset: PatchDataset | None = None
-        self.test_dataset: PatchDataset | None = None
+        self.train_dataset: PatchDataset | LazyChunkedPatchDataset | None = None
+        self.val_dataset: PatchDataset | LazyChunkedPatchDataset | None = None
+        self.test_dataset: PatchDataset | LazyChunkedPatchDataset | None = None
         self.train_labels: np.ndarray | None = None
 
     def prepare_data(self) -> None:
@@ -44,6 +47,7 @@ class LungScanDataModule(pl.LightningDataModule if pl is not None else object):
         if not bool(self.config.data.ensure_data):
             LOGGER.info("Data availability checks are disabled by config")
             return
+
         data_name = str(self.config.data.name)
         LOGGER.info("Preparing data for mode: %s", data_name)
         if data_name == "synthetic":
@@ -51,31 +55,42 @@ class LungScanDataModule(pl.LightningDataModule if pl is not None else object):
             return
 
         processed_dir = Path(self.config.data.processed_dir)
-        if (processed_dir / "volumes.npy").exists() and (processed_dir / "labels.npy").exists():
+        if self._processed_dataset_exists(processed_dir):
             LOGGER.info("Processed dataset already exists: %s", processed_dir)
             return
 
         LOGGER.info("Processed dataset is missing; trying DVC/internet/manual data step")
         download_data(self.config)
-        if not (processed_dir / "volumes.npy").exists():
+        if not self._processed_dataset_exists(processed_dir):
             LOGGER.info("Running preprocessing into %s", processed_dir)
             preprocess(self.config)
 
+    @staticmethod
+    def _processed_dataset_exists(processed_dir: Path) -> bool:
+        legacy_exists = (processed_dir / "volumes.npy").exists() and (
+            processed_dir / "labels.npy"
+        ).exists()
+        chunked_exists = (processed_dir / "manifest.csv").exists() and (
+            processed_dir / "labels.npy"
+        ).exists()
+        return legacy_exists or chunked_exists
+
     def setup(self, stage: str | None = None) -> None:
-        """Create datasets for train, validation, and test stages.
-
-        Args:
-        ----
-            stage: Optional Lightning stage name.
-
-        """
+        """Create datasets for train, validation, and test stages."""
         del stage
         if str(self.config.data.name) == "synthetic":
             processed_dir = Path(self.config.paths.processed_dir) / "synthetic"
         else:
             processed_dir = Path(self.config.data.processed_dir)
-        LOGGER.info("Loading patch arrays from %s", processed_dir)
-        volumes, labels = load_patch_arrays(processed_dir)
+
+        LOGGER.info("Loading patch metadata from %s", processed_dir)
+        uses_chunked_arrays = has_chunked_patch_arrays(processed_dir)
+        volumes: np.ndarray | None = None
+        if uses_chunked_arrays:
+            labels = load_patch_labels(processed_dir)
+        else:
+            volumes, labels = load_patch_arrays(processed_dir)
+
         train_idx, val_idx, test_idx = split_indices(
             num_items=len(labels),
             train_fraction=float(self.config.data.train_fraction),
@@ -84,10 +99,19 @@ class LungScanDataModule(pl.LightningDataModule if pl is not None else object):
             seed=int(self.config.seed),
         )
         augmentation = self._build_train_augmentation()
-        self.train_dataset = PatchDataset(volumes[train_idx], labels[train_idx], augmentation)
-        self.val_dataset = PatchDataset(volumes[val_idx], labels[val_idx])
-        self.test_dataset = PatchDataset(volumes[test_idx], labels[test_idx])
-        self.train_labels = labels[train_idx].astype(np.float32)
+
+        if uses_chunked_arrays:
+            self.train_dataset = LazyChunkedPatchDataset(processed_dir, train_idx, augmentation)
+            self.val_dataset = LazyChunkedPatchDataset(processed_dir, val_idx)
+            self.test_dataset = LazyChunkedPatchDataset(processed_dir, test_idx)
+        else:
+            if volumes is None:
+                raise RuntimeError("Legacy arrays were not loaded")
+            self.train_dataset = PatchDataset(volumes[train_idx], labels[train_idx], augmentation)
+            self.val_dataset = PatchDataset(volumes[val_idx], labels[val_idx])
+            self.test_dataset = PatchDataset(volumes[test_idx], labels[test_idx])
+
+        self.train_labels = labels[train_idx].astype(np.float32, copy=False)
         LOGGER.info(
             "Dataset split sizes: train=%d, val=%d, test=%d",
             len(self.train_dataset),
@@ -101,13 +125,7 @@ class LungScanDataModule(pl.LightningDataModule if pl is not None else object):
         )
 
     def _build_train_augmentation(self) -> AugmentationConfig | None:
-        """Build augmentation configuration for the training dataset.
-
-        Returns
-        -------
-            Augmentation config, or ``None`` when augmentations are disabled.
-
-        """
+        """Build augmentation configuration for the training dataset."""
         if not bool(self.config.preprocessing.augment.enabled):
             LOGGER.info("Training augmentations are disabled")
             return None
@@ -120,18 +138,13 @@ class LungScanDataModule(pl.LightningDataModule if pl is not None else object):
         )
 
     def _build_weighted_sampler(self) -> WeightedRandomSampler | None:
-        """Build a class-balanced weighted sampler for imbalanced candidate labels.
-
-        Returns
-        -------
-            Weighted sampler for the train split, or ``None`` when disabled.
-
-        """
+        """Build a class-balanced weighted sampler for imbalanced candidate labels."""
         if not bool(self.config.data.weighted_sampling.enabled):
             LOGGER.info("Weighted sampling is disabled")
             return None
         if self.train_labels is None:
             raise RuntimeError("setup() must be called before creating sampler")
+
         labels = torch.as_tensor(self.train_labels, dtype=torch.float32)
         positive_count = torch.clamp(labels.sum(), min=1.0)
         negative_count = torch.clamp((1.0 - labels).sum(), min=1.0)
@@ -153,21 +166,11 @@ class LungScanDataModule(pl.LightningDataModule if pl is not None else object):
     def _apply_hard_negative_weights(
         self, sample_weights: torch.Tensor, labels: torch.Tensor
     ) -> torch.Tensor:
-        """Increase sampling weights for previously selected hard negatives.
-
-        Args:
-        ----
-            sample_weights: Base class-balanced sample weights.
-            labels: Train labels with shape ``(N,)``.
-
-        Returns:
-        -------
-            Updated sample weights.
-
-        """
+        """Increase sampling weights for previously selected hard negatives."""
         hard_negative_config = getattr(self.config.data, "hard_negative_mining", None)
         if hard_negative_config is None or not bool(hard_negative_config.enabled):
             return sample_weights
+
         indices_path = Path(str(hard_negative_config.indices_path))
         if not indices_path.exists():
             LOGGER.info(
@@ -175,11 +178,13 @@ class LungScanDataModule(pl.LightningDataModule if pl is not None else object):
                 indices_path,
             )
             return sample_weights
+
         indices = np.load(indices_path).astype(np.int64)
         valid_indices = indices[(indices >= 0) & (indices < len(sample_weights))]
         if len(valid_indices) == 0:
             LOGGER.info("Hard negative file %s contains no valid train indices", indices_path)
             return sample_weights
+
         negative_mask = labels[torch.as_tensor(valid_indices)] < 0.5
         selected_indices = torch.as_tensor(valid_indices, dtype=torch.long)[negative_mask]
         multiplier = float(hard_negative_config.weight_multiplier)
@@ -192,13 +197,7 @@ class LungScanDataModule(pl.LightningDataModule if pl is not None else object):
         return sample_weights
 
     def train_dataloader(self) -> DataLoader[tuple[Any, Any]]:
-        """Return train dataloader.
-
-        Returns
-        -------
-            Dataloader over training patches.
-
-        """
+        """Return train dataloader."""
         if self.train_dataset is None:
             raise RuntimeError("setup() must be called before train_dataloader()")
         sampler = self._build_weighted_sampler()
@@ -211,13 +210,7 @@ class LungScanDataModule(pl.LightningDataModule if pl is not None else object):
         )
 
     def val_dataloader(self) -> DataLoader[tuple[Any, Any]]:
-        """Return validation dataloader.
-
-        Returns
-        -------
-            Dataloader over validation patches.
-
-        """
+        """Return validation dataloader."""
         if self.val_dataset is None:
             raise RuntimeError("setup() must be called before val_dataloader()")
         return DataLoader(
@@ -228,13 +221,7 @@ class LungScanDataModule(pl.LightningDataModule if pl is not None else object):
         )
 
     def test_dataloader(self) -> DataLoader[tuple[Any, Any]]:
-        """Return test dataloader.
-
-        Returns
-        -------
-            Dataloader over test patches.
-
-        """
+        """Return test dataloader."""
         if self.test_dataset is None:
             raise RuntimeError("setup() must be called before test_dataloader()")
         return DataLoader(
