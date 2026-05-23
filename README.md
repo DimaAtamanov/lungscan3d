@@ -1136,8 +1136,8 @@ pre-commit run -a
 # 17. Быстрый сценарий проверки проекта
 
 ```bash
-git clone https://github.com/<username>/lung-scan-3d.git
-cd lung-scan-3d
+git clone https://github.com/DimaAtamanov/lungscan3d.git
+cd lungscan3d
 
 uv sync --extra dev
 source .venv/bin/activate

@@ -138,3 +138,6 @@ checkpoints/
 # =========================
 .dvc/cache/
 dvc_storage/
+
+
+colab.ipynb
