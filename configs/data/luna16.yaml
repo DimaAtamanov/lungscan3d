@@ -1,0 +1,29 @@
+name: luna16
+raw_dir: data/raw/luna16
+candidates_csv: data/raw/luna16/candidates.csv
+processed_dir: data/processed/luna16
+patch_size: [32, 48, 48]
+batch_size: 8
+num_workers: 4
+train_fraction: 0.7
+val_fraction: 0.15
+test_fraction: 0.15
+ensure_data: true
+task: nodule_vs_non_nodule
+dvc_target: data/processed/luna16
+
+# Optional internet downloader. Disabled by default to avoid accidental 60+ GB downloads.
+allow_internet_download: true
+download_subsets: null
+download_max_subsets: 1
+download_metadata: true
+extract_archives: true
+keep_archives: true
+overwrite_downloads: false
+
+weighted_sampling:
+  enabled: true
+hard_negative_mining:
+  enabled: false
+  indices_path: artifacts/hard_negatives/train_hard_negatives.npy
+  weight_multiplier: 2.0

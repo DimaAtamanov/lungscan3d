@@ -1,0 +1,7 @@
+name: resnet3d_se
+in_channels: 1
+base_channels: 16
+blocks_per_stage: [2, 2, 2]
+se_reduction: 8
+dropout: 0.25
+local_crop_fraction: 0.5

@@ -1,0 +1,17 @@
+name: synthetic
+num_samples: 192
+positive_fraction: 0.35
+patch_size: [32, 48, 48]
+batch_size: 8
+num_workers: 0
+train_fraction: 0.7
+val_fraction: 0.15
+test_fraction: 0.15
+ensure_data: true
+
+weighted_sampling:
+  enabled: true
+hard_negative_mining:
+  enabled: false
+  indices_path: artifacts/hard_negatives/train_hard_negatives.npy
+  weight_multiplier: 2.0

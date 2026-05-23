@@ -1,0 +1,23 @@
+defaults:
+  - data: synthetic
+  - preprocessing: default
+  - model: dlwpt_baseline
+  - loss: bce
+  - trainer: default
+  - logging: mlflow_tensorboard
+  - postprocess: threshold
+  - infer: onnx
+  - _self_
+
+seed: 42
+project_name: lungscan3d
+
+paths:
+  data_dir: data
+  raw_dir: data/raw
+  processed_dir: data/processed
+  splits_dir: data/splits
+  examples_dir: data/examples
+  artifacts_dir: artifacts
+  plots_dir: plots
+  checkpoints_dir: artifacts/checkpoints

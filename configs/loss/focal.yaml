@@ -1,0 +1,6 @@
+name: focal
+alpha: 0.75
+gamma: 2.0
+focal_weight: 1.0
+bce_weight: 0.25
+pos_weight: null
