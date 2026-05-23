@@ -1,7 +1,6 @@
 """Training entry point."""
 
 import logging
-
 from typing import Any
 
 import pytorch_lightning as pl
@@ -28,7 +27,9 @@ def train(config: Any) -> None:
     """Train a LungScan3D model.
 
     Args:
+    ----
         config: Hydra configuration object.
+
     """
     LOGGER.info(
         "Starting training: project=%s, data=%s, model=%s",
@@ -94,15 +95,13 @@ def train(config: Any) -> None:
         ],
         logger=loggers,
     )
-    LOGGER.info(
-        "Launching Lightning trainer for %s epoch(s)", config.trainer.max_epochs
-    )
+    LOGGER.info("Launching Lightning trainer for %s epoch(s)", config.trainer.max_epochs)
     trainer.fit(lightning_module, datamodule=datamodule)
     LOGGER.info(
         "Training finished. Best checkpoint: %s",
         checkpoint.best_model_path or "not available",
     )
-    LOGGER.info("Running test evaluation with best checkpoint")
-    trainer.test(lightning_module, datamodule=datamodule, ckpt_path="best")
+    LOGGER.info("Running test evaluation")
+    trainer.test(lightning_module, datamodule=datamodule, ckpt_path=None)
     save_training_plots(metrics_history.history, config.paths.plots_dir)
     LOGGER.info("Training plots saved to %s", config.paths.plots_dir)

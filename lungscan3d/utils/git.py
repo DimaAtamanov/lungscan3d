@@ -8,10 +8,13 @@ def get_git_commit(repo_dir: str | Path = ".") -> str:
     """Return the current git commit hash when available.
 
     Args:
+    ----
         repo_dir: Repository directory.
 
     Returns:
+    -------
         Git commit hash or ``unknown`` when git metadata is not available.
+
     """
     try:
         result = subprocess.run(

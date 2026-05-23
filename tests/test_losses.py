@@ -1,5 +1,4 @@
 import torch
-
 from lungscan3d.training.losses import FocalLossWithLogits
 
 

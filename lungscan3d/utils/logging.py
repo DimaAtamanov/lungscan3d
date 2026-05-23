@@ -8,7 +8,9 @@ def setup_logging(level: str = "INFO") -> None:
     """Configure human-readable console logging.
 
     Args:
+    ----
         level: Logging level name, for example ``INFO`` or ``DEBUG``.
+
     """
     numeric_level = getattr(logging, level.upper(), logging.INFO)
     root_logger = logging.getLogger()

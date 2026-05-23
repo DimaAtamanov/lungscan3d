@@ -1,5 +1,4 @@
 import numpy as np
-
 from lungscan3d.data.preprocessing import (
     crop_or_pad_patch,
     normalize_hu,

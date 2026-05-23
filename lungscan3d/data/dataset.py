@@ -15,11 +15,13 @@ LOGGER = logging.getLogger(__name__)
 class AugmentationConfig:
     """Configuration for lightweight 3D CT augmentations.
 
-    Attributes:
+    Attributes
+    ----------
         random_flip: Whether to randomly flip the patch along spatial axes.
         random_rotate90: Whether to randomly rotate the patch by multiples of 90 degrees.
         gaussian_noise_std: Standard deviation of additive Gaussian noise.
         random_shift_voxels: Maximum absolute spatial shift in voxels for each axis.
+
     """
 
     random_flip: bool = False
@@ -32,17 +34,18 @@ def _random_shift(volume: torch.Tensor, max_shift: int) -> torch.Tensor:
     """Randomly shift a 3D volume and zero-fill uncovered areas.
 
     Args:
+    ----
         volume: Tensor with shape ``(C, D, H, W)``.
         max_shift: Maximum absolute shift in voxels for each spatial axis.
 
     Returns:
+    -------
         Shifted tensor with the same shape.
+
     """
     if max_shift <= 0:
         return volume
-    shifts = [
-        int(torch.randint(-max_shift, max_shift + 1, (1,)).item()) for _ in range(3)
-    ]
+    shifts = [int(torch.randint(-max_shift, max_shift + 1, (1,)).item()) for _ in range(3)]
     shifted = torch.zeros_like(volume)
     source_slices: list[slice] = [slice(None)]
     target_slices: list[slice] = [slice(None)]
@@ -57,17 +60,18 @@ def _random_shift(volume: torch.Tensor, max_shift: int) -> torch.Tensor:
     return shifted
 
 
-def apply_augmentations(
-    volume: torch.Tensor, config: AugmentationConfig
-) -> torch.Tensor:
+def apply_augmentations(volume: torch.Tensor, config: AugmentationConfig) -> torch.Tensor:
     """Apply stochastic 3D augmentations to a CT patch.
 
     Args:
+    ----
         volume: Tensor with shape ``(C, D, H, W)``.
         config: Augmentation configuration.
 
     Returns:
+    -------
         Augmented tensor with shape ``(C, D, H, W)``.
+
     """
     augmented = volume.clone()
     if config.random_flip:
@@ -76,9 +80,7 @@ def apply_augmentations(
                 augmented = torch.flip(augmented, dims=(axis,))
     if config.random_rotate90:
         k = int(torch.randint(0, 4, (1,)).item())
-        plane_index = int(torch.randint(0, 3, (1,)).item())
-        planes = ((1, 2), (1, 3), (2, 3))
-        augmented = torch.rot90(augmented, k=k, dims=planes[plane_index])
+        augmented = torch.rot90(augmented, k=k, dims=(2, 3))
     augmented = _random_shift(augmented, int(config.random_shift_voxels))
     if config.gaussian_noise_std > 0:
         noise = torch.randn_like(augmented) * float(config.gaussian_noise_std)
@@ -98,9 +100,11 @@ class PatchDataset(Dataset[tuple[torch.Tensor, torch.Tensor]]):
         """Initialize dataset.
 
         Args:
+        ----
             volumes: Array with shape ``(N, C, D, H, W)``.
             labels: Binary labels with shape ``(N,)``.
             augmentation: Optional stochastic augmentation config.
+
         """
         if volumes.ndim != 5:
             raise ValueError("volumes must have shape (N, C, D, H, W)")
@@ -120,10 +124,13 @@ class PatchDataset(Dataset[tuple[torch.Tensor, torch.Tensor]]):
         """Return a single volume and label.
 
         Args:
+        ----
             index: Sample index.
 
         Returns:
+        -------
             Tuple ``(volume, label)`` where volume is a float tensor and label has shape ``(1,)``.
+
         """
         volume = torch.from_numpy(self.volumes[index])
         if self.augmentation is not None:
@@ -136,10 +143,13 @@ def load_patch_arrays(processed_dir: str | Path) -> tuple[np.ndarray, np.ndarray
     """Load preprocessed patch arrays from disk.
 
     Args:
+    ----
         processed_dir: Directory containing ``volumes.npy`` and ``labels.npy``.
 
     Returns:
+    -------
         Tuple with volumes and labels arrays.
+
     """
     directory = Path(processed_dir)
     LOGGER.info("Loading volumes from %s", directory / "volumes.npy")

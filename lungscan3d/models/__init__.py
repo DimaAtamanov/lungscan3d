@@ -12,10 +12,13 @@ def build_model(config: Any) -> nn.Module:
     """Build a model from Hydra configuration.
 
     Args:
+    ----
         config: Hydra configuration with a ``model`` section.
 
     Returns:
+    -------
         Instantiated PyTorch module.
+
     """
     model_name = str(config.model.name)
     if model_name == "dlwpt_baseline":

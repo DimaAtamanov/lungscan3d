@@ -11,17 +11,18 @@ from lungscan3d.utils.paths import ensure_dir
 LOGGER = logging.getLogger(__name__)
 
 
-def export_tensorrt(
-    config: Any, output: str = "artifacts/tensorrt/lungscan3d.engine"
-) -> Path:
+def export_tensorrt(config: Any, output: str = "artifacts/tensorrt/lungscan3d.engine") -> Path:
     """Convert ONNX model to TensorRT engine through ``trtexec``.
 
     Args:
+    ----
         config: Hydra configuration object.
         output: Target TensorRT engine path.
 
     Returns:
+    -------
         Path to TensorRT engine.
+
     """
     LOGGER.info("Preparing TensorRT export")
     onnx_path = Path(config.infer.onnx_path)

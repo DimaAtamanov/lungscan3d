@@ -11,8 +11,10 @@ class SqueezeExcitation3D(nn.Module):
         """Initialize block.
 
         Args:
+        ----
             channels: Number of feature channels.
             reduction: Channel reduction ratio.
+
         """
         super().__init__()
         reduced_channels = max(1, channels // reduction)
@@ -28,10 +30,13 @@ class SqueezeExcitation3D(nn.Module):
         """Apply channel attention.
 
         Args:
+        ----
             input_tensor: Input tensor with shape ``(B, C, D, H, W)``.
 
         Returns:
+        -------
             Reweighted tensor with the same shape.
+
         """
         batch_size, channels = input_tensor.shape[:2]
         pooled = self.pool(input_tensor).view(batch_size, channels)
@@ -42,16 +47,16 @@ class SqueezeExcitation3D(nn.Module):
 class ResidualSEBlock3D(nn.Module):
     """Residual 3D convolutional block with squeeze-and-excitation."""
 
-    def __init__(
-        self, in_channels: int, out_channels: int, stride: int, se_reduction: int
-    ) -> None:
+    def __init__(self, in_channels: int, out_channels: int, stride: int, se_reduction: int) -> None:
         """Initialize block.
 
         Args:
+        ----
             in_channels: Number of input channels.
             out_channels: Number of output channels.
             stride: Stride for the first convolution.
             se_reduction: Reduction ratio for SE attention.
+
         """
         super().__init__()
         self.body = nn.Sequential(
@@ -71,9 +76,7 @@ class ResidualSEBlock3D(nn.Module):
         )
         if in_channels != out_channels or stride != 1:
             self.shortcut = nn.Sequential(
-                nn.Conv3d(
-                    in_channels, out_channels, kernel_size=1, stride=stride, bias=False
-                ),
+                nn.Conv3d(in_channels, out_channels, kernel_size=1, stride=stride, bias=False),
                 nn.BatchNorm3d(out_channels),
             )
         else:
@@ -84,9 +87,12 @@ class ResidualSEBlock3D(nn.Module):
         """Run forward pass.
 
         Args:
+        ----
             input_tensor: Input tensor.
 
         Returns:
+        -------
             Block output tensor.
+
         """
         return self.activation(self.body(input_tensor) + self.shortcut(input_tensor))

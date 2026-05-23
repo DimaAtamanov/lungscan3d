@@ -1,5 +1,4 @@
 import numpy as np
-
 from lungscan3d.data.dataset import PatchDataset
 from lungscan3d.data.splits import split_indices
 
@@ -21,7 +20,5 @@ def test_split_indices_are_reproducible():
     first = split_indices(100, 0.7, 0.15, 0.15, seed=42)
     second = split_indices(100, 0.7, 0.15, 0.15, seed=42)
 
-    assert all(
-        np.array_equal(left, right) for left, right in zip(first, second, strict=True)
-    )
+    assert all(np.array_equal(left, right) for left, right in zip(first, second, strict=True))
     assert sum(len(split) for split in first) == 100

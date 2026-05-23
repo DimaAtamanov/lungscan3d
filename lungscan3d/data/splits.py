@@ -13,6 +13,7 @@ def split_indices(
     """Create reproducible train/validation/test indices.
 
     Args:
+    ----
         num_items: Number of items to split.
         train_fraction: Fraction assigned to train split.
         val_fraction: Fraction assigned to validation split.
@@ -20,7 +21,9 @@ def split_indices(
         seed: Random seed.
 
     Returns:
+    -------
         Train, validation, and test index arrays.
+
     """
     if not 0.0 < train_fraction < 1.0:
         raise ValueError("train_fraction must be in (0, 1)")

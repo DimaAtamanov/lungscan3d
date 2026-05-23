@@ -20,11 +20,14 @@ def infer_patch(config: Any, input_path: str | Path) -> dict[str, float | int]:
     """Run PyTorch inference on a preprocessed NumPy patch.
 
     Args:
+    ----
         config: Hydra configuration object.
         input_path: Path to ``.npy`` patch with shape ``(1, D, H, W)`` or ``(D, H, W)``.
 
     Returns:
+    -------
         Prediction dictionary.
+
     """
     LOGGER.info("Loading input patch: %s", input_path)
     patch = np.load(input_path).astype(np.float32)
@@ -41,9 +44,7 @@ def infer_patch(config: Any, input_path: str | Path) -> dict[str, float | int]:
         LOGGER.info("Loading checkpoint: %s", checkpoint_path)
         checkpoint = torch.load(checkpoint_path, map_location="cpu")
         state_dict = checkpoint.get("state_dict", checkpoint)
-        model_state_dict = {
-            key.replace("model.", ""): value for key, value in state_dict.items()
-        }
+        model_state_dict = {key.replace("model.", ""): value for key, value in state_dict.items()}
         model.load_state_dict(model_state_dict, strict=False)
     with torch.no_grad():
         logits = extract_positive_logits(model(input_tensor))
@@ -61,8 +62,10 @@ def infer(config: Any, input: str) -> None:
     """Run inference and print JSON result.
 
     Args:
+    ----
         config: Hydra configuration object.
         input: Path to input NumPy patch.
+
     """
     result = infer_patch(config, input)
     LOGGER.info(

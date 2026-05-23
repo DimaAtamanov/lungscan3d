@@ -14,26 +14,26 @@ class MetricsHistoryCallback(pl.Callback):
         super().__init__()
         self.history: dict[str, list[float]] = defaultdict(list)
 
-    def on_train_epoch_end(
-        self, trainer: pl.Trainer, pl_module: pl.LightningModule
-    ) -> None:
+    def on_train_epoch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
         """Collect available metrics after a train epoch.
 
         Args:
+        ----
             trainer: Active Lightning trainer.
             pl_module: Active Lightning module.
+
         """
         del pl_module
         self._collect_metrics(trainer.callback_metrics)
 
-    def on_validation_epoch_end(
-        self, trainer: pl.Trainer, pl_module: pl.LightningModule
-    ) -> None:
+    def on_validation_epoch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
         """Collect available metrics after a validation epoch.
 
         Args:
+        ----
             trainer: Active Lightning trainer.
             pl_module: Active Lightning module.
+
         """
         del pl_module
         self._collect_metrics(trainer.callback_metrics)
@@ -42,7 +42,9 @@ class MetricsHistoryCallback(pl.Callback):
         """Store scalar metrics from Lightning callback metrics.
 
         Args:
+        ----
             metrics: Mapping of metric names to scalar-like values.
+
         """
         for name, value in metrics.items():
             if not _should_plot_metric(name):
@@ -62,10 +64,13 @@ def _should_plot_metric(name: str) -> bool:
     """Return whether a metric should be stored for static plots.
 
     Args:
+    ----
         name: Lightning metric name.
 
     Returns:
+    -------
         True when the metric is one of the tracked training curves.
+
     """
     allowed_prefixes = (
         "train/loss",

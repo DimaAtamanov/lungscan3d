@@ -33,7 +33,8 @@ DatasetSplit = Literal["val", "test"]
 class ThresholdSearchResult:
     """Result of threshold optimization.
 
-    Attributes:
+    Attributes
+    ----------
         threshold: Selected decision threshold.
         strategy: Optimization strategy name.
         min_precision: Minimum precision constraint used by the strategy.
@@ -45,6 +46,7 @@ class ThresholdSearchResult:
         pr_auc: PR-AUC computed from probabilities.
         positive_rate: Fraction of positive predictions at the selected threshold.
         num_samples: Number of evaluated samples.
+
     """
 
     threshold: float
@@ -68,12 +70,15 @@ def metrics_at_threshold(
     """Compute binary metrics at a fixed decision threshold.
 
     Args:
+    ----
         labels: Binary ground-truth labels with shape ``(N,)``.
         probabilities: Positive-class probabilities with shape ``(N,)``.
         threshold: Decision threshold in the ``[0, 1]`` range.
 
     Returns:
+    -------
         Dictionary with precision, recall, F1-score, and positive prediction rate.
+
     """
     predictions = (probabilities >= threshold).astype(np.int64)
     return {
@@ -84,20 +89,21 @@ def metrics_at_threshold(
     }
 
 
-def build_threshold_grid(
-    probabilities: np.ndarray, num_thresholds: int = 1001
-) -> np.ndarray:
+def build_threshold_grid(probabilities: np.ndarray, num_thresholds: int = 1001) -> np.ndarray:
     """Build a stable threshold grid for optimization.
 
     The grid combines a regular ``[0, 1]`` grid with observed probability values. This makes the
     search deterministic and avoids missing a useful operating point on small validation sets.
 
     Args:
+    ----
         probabilities: Positive-class probabilities with shape ``(N,)``.
         num_thresholds: Number of regular grid thresholds.
 
     Returns:
+    -------
         Sorted unique threshold values.
+
     """
     regular_grid = np.linspace(0.0, 1.0, num_thresholds, dtype=np.float64)
     observed_values = np.asarray(probabilities, dtype=np.float64)
@@ -119,6 +125,7 @@ def select_threshold(
     context of false-positive reduction.
 
     Args:
+    ----
         labels: Binary ground-truth labels with shape ``(N,)``.
         probabilities: Positive-class probabilities with shape ``(N,)``.
         strategy: Threshold selection strategy.
@@ -126,10 +133,13 @@ def select_threshold(
         min_recall: Recall lower bound for ``precision_at_min_recall``.
 
     Returns:
+    -------
         Threshold search result with metrics at the selected threshold.
 
     Raises:
+    ------
         ValueError: If labels and probabilities are invalid or if the strategy is unknown.
+
     """
     labels = np.asarray(labels, dtype=np.int64).reshape(-1)
     probabilities = np.asarray(probabilities, dtype=np.float64).reshape(-1)
@@ -176,9 +186,7 @@ def select_threshold(
             ),
         )
     elif strategy == "f1":
-        best_row = max(
-            rows, key=lambda row: (row["f1"], row["recall"], row["precision"])
-        )
+        best_row = max(rows, key=lambda row: (row["f1"], row["recall"], row["precision"]))
     else:
         raise ValueError(f"Unknown threshold selection strategy: {strategy}")
 
@@ -207,12 +215,15 @@ def collect_probabilities(
     """Collect labels and predicted probabilities from a dataloader.
 
     Args:
+    ----
         lightning_module: Trained Lightning module.
         dataloader: Validation or test dataloader.
         device: Device used for inference.
 
     Returns:
+    -------
         Pair ``(labels, probabilities)`` as NumPy arrays.
+
     """
     lightning_module.eval()
     lightning_module.to(device)
@@ -237,6 +248,7 @@ def optimize_threshold(
     """Optimize and persist the decision threshold for a trained model.
 
     Args:
+    ----
         config: Hydra configuration object.
         checkpoint: Path to a trained Lightning checkpoint. If omitted, ``infer.checkpoint_path`` is
             used.
@@ -246,7 +258,9 @@ def optimize_threshold(
             used.
 
     Returns:
+    -------
         Threshold search result.
+
     """
     LOGGER.info("Starting threshold optimization on split=%s", split)
     checkpoint_path = Path(checkpoint or config.infer.checkpoint_path)
@@ -256,9 +270,7 @@ def optimize_threshold(
     datamodule = LungScanDataModule(config)
     datamodule.prepare_data()
     datamodule.setup(stage="fit")
-    dataloader = (
-        datamodule.val_dataloader() if split == "val" else datamodule.test_dataloader()
-    )
+    dataloader = datamodule.val_dataloader() if split == "val" else datamodule.test_dataloader()
 
     model = build_model(config)
     lightning_module = LungScanLightningModule.load_from_checkpoint(
@@ -288,14 +300,14 @@ def optimize_threshold(
     return result
 
 
-def save_threshold_result(
-    result: ThresholdSearchResult, output_path: str | Path
-) -> None:
+def save_threshold_result(result: ThresholdSearchResult, output_path: str | Path) -> None:
     """Save threshold search result as JSON.
 
     Args:
+    ----
         result: Threshold optimization result.
         output_path: Target JSON file path.
+
     """
     output_path = Path(output_path)
     ensure_dir(output_path.parent)
@@ -307,17 +319,18 @@ def load_threshold_from_artifact(path: str | Path, fallback: float) -> float:
     """Load an optimized threshold from JSON if the artifact exists.
 
     Args:
+    ----
         path: Threshold artifact path.
         fallback: Fallback threshold from static config.
 
     Returns:
+    -------
         Optimized threshold or fallback value.
+
     """
     artifact_path = Path(path)
     if not artifact_path.exists():
-        LOGGER.info(
-            "Threshold artifact not found; using fallback threshold %.6f", fallback
-        )
+        LOGGER.info("Threshold artifact not found; using fallback threshold %.6f", fallback)
         return float(fallback)
     payload = json.loads(artifact_path.read_text(encoding="utf-8"))
     threshold = float(payload.get("threshold", fallback))
@@ -329,11 +342,14 @@ def _safe_roc_auc(labels: np.ndarray, probabilities: np.ndarray) -> float:
     """Compute ROC-AUC while handling single-class validation splits.
 
     Args:
+    ----
         labels: Binary ground-truth labels.
         probabilities: Positive-class probabilities.
 
     Returns:
+    -------
         ROC-AUC or ``nan`` when the metric is undefined.
+
     """
     if len(np.unique(labels)) < 2:
         return float("nan")
@@ -344,11 +360,14 @@ def _safe_pr_auc(labels: np.ndarray, probabilities: np.ndarray) -> float:
     """Compute PR-AUC while handling degenerate validation splits.
 
     Args:
+    ----
         labels: Binary ground-truth labels.
         probabilities: Positive-class probabilities.
 
     Returns:
+    -------
         PR-AUC or ``nan`` when the metric is undefined.
+
     """
     if len(np.unique(labels)) < 2:
         return float("nan")

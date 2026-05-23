@@ -1,7 +1,6 @@
 """Tests for data download helpers."""
 
 import pytest
-
 from lungscan3d.data.download import parse_subset_selection
 
 

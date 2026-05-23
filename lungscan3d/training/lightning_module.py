@@ -28,8 +28,10 @@ class LungScanLightningModule(pl.LightningModule if pl is not None else nn.Modul
         """Initialize Lightning module.
 
         Args:
+        ----
             model: PyTorch classifier returning binary logits.
             config: Hydra configuration.
+
         """
         super().__init__()
         self.model = model
@@ -53,10 +55,13 @@ class LungScanLightningModule(pl.LightningModule if pl is not None else nn.Modul
         """Run model forward pass.
 
         Args:
+        ----
             input_tensor: Input tensor with shape ``(B, C, D, H, W)``.
 
         Returns:
+        -------
             Binary logits with shape ``(B, 1)``.
+
         """
         return extract_positive_logits(self.model(input_tensor))
 
@@ -68,11 +73,14 @@ class LungScanLightningModule(pl.LightningModule if pl is not None else nn.Modul
         """Run one training step.
 
         Args:
+        ----
             batch: Pair of input volumes and labels.
             batch_idx: Batch index.
 
         Returns:
+        -------
             Training loss tensor.
+
         """
         del batch_idx
         volumes, labels = batch
@@ -89,11 +97,14 @@ class LungScanLightningModule(pl.LightningModule if pl is not None else nn.Modul
         """Run one validation step.
 
         Args:
+        ----
             batch: Pair of input volumes and labels.
             batch_idx: Batch index.
 
         Returns:
+        -------
             Validation loss tensor.
+
         """
         del batch_idx
         volumes, labels = batch
@@ -122,17 +133,18 @@ class LungScanLightningModule(pl.LightningModule if pl is not None else nn.Modul
         self.val_precision.reset()
         self.val_f1.reset()
 
-    def test_step(
-        self, batch: tuple[torch.Tensor, torch.Tensor], batch_idx: int
-    ) -> torch.Tensor:
+    def test_step(self, batch: tuple[torch.Tensor, torch.Tensor], batch_idx: int) -> torch.Tensor:
         """Run one test step.
 
         Args:
+        ----
             batch: Pair of input volumes and labels.
             batch_idx: Batch index.
 
         Returns:
+        -------
             Test loss tensor.
+
         """
         del batch_idx
         volumes, labels = batch
@@ -164,17 +176,17 @@ class LungScanLightningModule(pl.LightningModule if pl is not None else nn.Modul
     def configure_optimizers(self) -> dict[str, Any]:
         """Configure optimizer and learning-rate scheduler.
 
-        Returns:
+        Returns
+        -------
             Lightning optimizer configuration.
+
         """
         optimizer = torch.optim.AdamW(
             self.parameters(),
             lr=float(self.config.trainer.learning_rate),
             weight_decay=float(self.config.trainer.weight_decay),
         )
-        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            optimizer, mode="min", patience=2
-        )
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", patience=2)
         return {
             "optimizer": optimizer,
             "lr_scheduler": {"scheduler": scheduler, "monitor": "val/loss"},

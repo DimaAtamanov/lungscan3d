@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-
 from lungscan3d.utils.dvc import dvc_pull
 from lungscan3d.utils.paths import ensure_dir
 
@@ -34,11 +33,13 @@ def generate_synthetic_dataset(
     CI, smoke tests, and assignment validation, not for medical conclusions.
 
     Args:
+    ----
         output_dir: Directory where ``volumes.npy`` and ``labels.npy`` are written.
         num_samples: Number of generated examples.
         patch_size: Patch shape in ``(D, H, W)`` order.
         positive_fraction: Share of positive examples.
         seed: Random seed for reproducibility.
+
     """
     LOGGER.info(
         "Generating synthetic dataset: output_dir=%s, num_samples=%s",
@@ -47,9 +48,7 @@ def generate_synthetic_dataset(
     )
     rng = np.random.default_rng(seed)
     output_path = ensure_dir(output_dir)
-    volumes = rng.normal(
-        loc=0.0, scale=0.18, size=(num_samples, 1, *patch_size)
-    ).astype(np.float32)
+    volumes = rng.normal(loc=0.0, scale=0.18, size=(num_samples, 1, *patch_size)).astype(np.float32)
     labels = (rng.random(num_samples) < positive_fraction).astype(np.float32)
 
     depth, height, width = patch_size
@@ -86,27 +85,27 @@ def parse_subset_selection(subsets: str | None, max_subsets: int | None) -> list
     """Parse requested LUNA16 subset ids.
 
     Args:
+    ----
         subsets: Comma-separated subset ids, for example ``"0,1,2"``. ``None`` means
             use ``max_subsets`` or all subsets.
         max_subsets: Optional number of first subsets to download.
 
     Returns:
+    -------
         Sorted list of subset ids.
 
     Raises:
+    ------
         ValueError: If subset ids are invalid.
+
     """
     if subsets:
-        subset_ids = sorted(
-            {int(value.strip()) for value in subsets.split(",") if value.strip()}
-        )
+        subset_ids = sorted({int(value.strip()) for value in subsets.split(",") if value.strip()})
     elif max_subsets is not None:
         subset_ids = list(range(int(max_subsets)))
     else:
         subset_ids = list(range(10))
-    invalid_ids = [
-        subset_id for subset_id in subset_ids if subset_id < 0 or subset_id > 9
-    ]
+    invalid_ids = [subset_id for subset_id in subset_ids if subset_id < 0 or subset_id > 9]
     if invalid_ids:
         raise ValueError(f"LUNA16 subset ids must be in [0, 9], got: {invalid_ids}")
     return subset_ids
@@ -116,10 +115,13 @@ def _zenodo_url(filename: str) -> str:
     """Build a Zenodo direct download URL for a LUNA16 file.
 
     Args:
+    ----
         filename: LUNA16 file name on Zenodo.
 
     Returns:
+    -------
         Direct download URL.
+
     """
     base_url = (
         LUNA16_PART2_RECORD_URL
@@ -133,9 +135,11 @@ def _download_file(url: str, target_path: Path, overwrite: bool) -> None:
     """Download a file unless it already exists.
 
     Args:
+    ----
         url: Source URL.
         target_path: Local destination path.
         overwrite: Whether to redownload existing files.
+
     """
     if target_path.exists() and not overwrite:
         LOGGER.info("File already exists, skipping download: %s", target_path)
@@ -144,18 +148,18 @@ def _download_file(url: str, target_path: Path, overwrite: bool) -> None:
     LOGGER.info("Downloading %s -> %s", url, target_path)
     with urllib.request.urlopen(url) as response, target_path.open("wb") as output_file:
         shutil.copyfileobj(response, output_file, length=1024 * 1024)
-    LOGGER.info(
-        "Downloaded %s (%.2f MB)", target_path, target_path.stat().st_size / 1024 / 1024
-    )
+    LOGGER.info("Downloaded %s (%.2f MB)", target_path, target_path.stat().st_size / 1024 / 1024)
 
 
 def _extract_zip(zip_path: Path, output_dir: Path, overwrite: bool) -> None:
     """Extract a zip archive to a directory.
 
     Args:
+    ----
         zip_path: Archive path.
         output_dir: Extraction directory.
         overwrite: Whether to extract again when output directory already exists.
+
     """
     subset_dir = output_dir / zip_path.stem
     if subset_dir.exists() and any(subset_dir.iterdir()) and not overwrite:
@@ -182,6 +186,7 @@ def download_luna16_dataset(
     with one or two subsets, for example ``subsets="0"`` or ``max_subsets=2``.
 
     Args:
+    ----
         raw_dir: Destination directory, normally ``data/raw/luna16``.
         subsets: Comma-separated subset ids to download, for example ``"0,1"``.
         max_subsets: Optional number of first subsets to download when ``subsets`` is
@@ -190,6 +195,7 @@ def download_luna16_dataset(
         extract: Whether to unzip downloaded subset archives.
         keep_archives: Whether to keep ``subset*.zip`` files after extraction.
         overwrite: Whether to redownload existing files and re-extract archives.
+
     """
     output_dir = ensure_dir(raw_dir)
     subset_ids = parse_subset_selection(subsets=subsets, max_subsets=max_subsets)
@@ -198,9 +204,7 @@ def download_luna16_dataset(
 
     if include_metadata:
         for filename in LUNA16_METADATA_FILES:
-            _download_file(
-                _zenodo_url(filename), output_dir / filename, overwrite=overwrite
-            )
+            _download_file(_zenodo_url(filename), output_dir / filename, overwrite=overwrite)
 
     for subset_id in subset_ids:
         filename = LUNA16_SUBSET_FILES[subset_id]
@@ -219,7 +223,9 @@ def download_data(config: Any) -> None:
     """Ensure that configured data exists locally.
 
     Args:
+    ----
         config: Hydra configuration object with ``data`` and ``paths`` sections.
+
     """
     data_name = str(config.data.name)
     LOGGER.info("Ensuring dataset is available: %s", data_name)
@@ -242,9 +248,7 @@ def download_data(config: Any) -> None:
         LOGGER.info("Dataset restored via DVC target: %s", dvc_target)
         return
 
-    if data_name == "luna16" and bool(
-        getattr(config.data, "allow_internet_download", False)
-    ):
+    if data_name == "luna16" and bool(getattr(config.data, "allow_internet_download", False)):
         download_luna16_dataset(
             raw_dir=Path(config.data.raw_dir),
             subsets=getattr(config.data, "download_subsets", None),

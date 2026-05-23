@@ -1,5 +1,4 @@
 import numpy as np
-
 from lungscan3d.training.hard_negative_mining import select_hard_negative_indices
 
 

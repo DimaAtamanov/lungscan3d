@@ -25,10 +25,12 @@ class ResNet3DEncoder(nn.Module):
         """Initialize encoder.
 
         Args:
+        ----
             in_channels: Number of input channels.
             base_channels: Number of stem output channels.
             blocks_per_stage: Number of residual blocks in each stage.
             se_reduction: Reduction ratio for SE blocks.
+
         """
         super().__init__()
         self.stem = nn.Sequential(
@@ -59,10 +61,13 @@ class ResNet3DEncoder(nn.Module):
         """Encode one 3D CT patch scale.
 
         Args:
+        ----
             input_tensor: Input tensor with shape ``(B, C, D, H, W)``.
 
         Returns:
+        -------
             Feature tensor with shape ``(B, out_channels)``.
+
         """
         features = self.stem(input_tensor)
         features = self.stages(features)
@@ -91,12 +96,14 @@ class MultiScaleResNet3DSE(nn.Module):
         """Initialize multi-scale model.
 
         Args:
+        ----
             in_channels: Number of input channels.
             base_channels: Number of stem output channels for each branch.
             blocks_per_stage: Number of residual blocks in each stage.
             se_reduction: Reduction ratio for SE blocks.
             dropout: Dropout before classification head.
             local_crop_fraction: Fraction of each spatial dimension used by the local branch.
+
         """
         super().__init__()
         if not 0.0 < local_crop_fraction <= 1.0:
@@ -114,9 +121,7 @@ class MultiScaleResNet3DSE(nn.Module):
             blocks_per_stage=blocks_per_stage,
             se_reduction=se_reduction,
         )
-        feature_dim = (
-            self.context_encoder.out_channels + self.local_encoder.out_channels
-        )
+        feature_dim = self.context_encoder.out_channels + self.local_encoder.out_channels
         self.classifier = nn.Sequential(
             nn.Dropout(float(dropout)),
             nn.Linear(feature_dim, feature_dim // 2),
@@ -129,10 +134,13 @@ class MultiScaleResNet3DSE(nn.Module):
         """Extract and resize the local center crop for the local branch.
 
         Args:
+        ----
             input_tensor: Full context patch with shape ``(B, C, D, H, W)``.
 
         Returns:
+        -------
             Center-cropped patch resized back to the original spatial shape.
+
         """
         _, _, depth, height, width = input_tensor.shape
         crop_depth = max(1, int(round(depth * self.local_crop_fraction)))
@@ -159,10 +167,13 @@ class MultiScaleResNet3DSE(nn.Module):
         """Run multi-scale forward pass.
 
         Args:
+        ----
             input_tensor: Input tensor with shape ``(B, 1, D, H, W)``.
 
         Returns:
+        -------
             Binary logits with shape ``(B, 1)``.
+
         """
         local_patch = self._center_crop(input_tensor)
         context_features = self.context_encoder(input_tensor)

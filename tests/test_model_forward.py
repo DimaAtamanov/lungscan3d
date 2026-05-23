@@ -1,5 +1,4 @@
 import torch
-
 from lungscan3d.models.baseline3d import LunaModel
 from lungscan3d.models.outputs import extract_positive_logits
 from lungscan3d.models.resnet3d import ResNet3DSE

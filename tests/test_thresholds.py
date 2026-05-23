@@ -4,7 +4,6 @@ import json
 from pathlib import Path
 
 import numpy as np
-
 from lungscan3d.inference.thresholds import (
     load_threshold_from_artifact,
     metrics_at_threshold,
@@ -52,14 +51,9 @@ def test_threshold_artifact_roundtrip(tmp_path: Path) -> None:
     loaded_threshold = load_threshold_from_artifact(output_path, fallback=0.5)
 
     assert output_path.exists()
-    assert (
-        json.loads(output_path.read_text(encoding="utf-8"))["threshold"]
-        == result.threshold
-    )
+    assert json.loads(output_path.read_text(encoding="utf-8"))["threshold"] == result.threshold
     assert loaded_threshold == result.threshold
 
 
 def test_load_threshold_uses_fallback_for_missing_artifact(tmp_path: Path) -> None:
-    assert (
-        load_threshold_from_artifact(tmp_path / "missing.json", fallback=0.35) == 0.35
-    )
+    assert load_threshold_from_artifact(tmp_path / "missing.json", fallback=0.35) == 0.35

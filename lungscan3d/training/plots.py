@@ -11,8 +11,10 @@ def save_training_plots(history: dict[str, list[float]], plots_dir: str | Path) 
     """Save static training plots as PNG files.
 
     Args:
+    ----
         history: Metric history collected during training.
         plots_dir: Directory where plot images are written.
+
     """
     output_dir = ensure_dir(plots_dir)
     plot_specs = {
@@ -36,9 +38,11 @@ def _save_single_plot(
     """Save one metric plot.
 
     Args:
+    ----
         history: Metric history collected during training.
         metric_names: Names to include in the plot.
         output_path: Target PNG file path.
+
     """
     figure = plt.figure()
     has_values = False

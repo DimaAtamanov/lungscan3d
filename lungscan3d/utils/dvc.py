@@ -11,10 +11,13 @@ def _run_dvc_command(command: list[str]) -> bool:
     """Run a DVC command and report whether it succeeded.
 
     Args:
+    ----
         command: Full command line as a list of arguments.
 
     Returns:
+    -------
         ``True`` when DVC completed successfully, otherwise ``False``.
+
     """
     LOGGER.info("Running DVC command: %s", " ".join(command))
     try:
@@ -30,11 +33,14 @@ def dvc_pull(target: str | Path | None = None, remote: str | None = None) -> boo
     """Pull data or model artifacts via DVC.
 
     Args:
+    ----
         target: Optional DVC target to pull.
         remote: Optional DVC remote name.
 
     Returns:
+    -------
         ``True`` when DVC completed successfully, otherwise ``False``.
+
     """
     command = ["dvc", "pull"]
     if remote is not None:
@@ -48,11 +54,14 @@ def dvc_push(target: str | Path | None = None, remote: str | None = None) -> boo
     """Push data or model artifacts via DVC.
 
     Args:
+    ----
         target: Optional DVC target to push.
         remote: Optional DVC remote name.
 
     Returns:
+    -------
         ``True`` when DVC completed successfully, otherwise ``False``.
+
     """
     command = ["dvc", "push"]
     if remote is not None:
@@ -66,9 +75,12 @@ def dvc_add(target: str | Path) -> bool:
     """Add a target to DVC tracking.
 
     Args:
+    ----
         target: File or directory to track with DVC.
 
     Returns:
+    -------
         ``True`` when DVC completed successfully, otherwise ``False``.
+
     """
     return _run_dvc_command(["dvc", "add", str(target)])

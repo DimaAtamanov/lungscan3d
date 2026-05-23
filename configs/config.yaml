@@ -21,3 +21,5 @@ paths:
   artifacts_dir: artifacts
   plots_dir: plots
   checkpoints_dir: artifacts/checkpoints
+
+triton_client: localhost:8000

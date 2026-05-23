@@ -17,8 +17,10 @@ class FocalLossWithLogits(nn.Module):
         """Initialize focal loss.
 
         Args:
+        ----
             alpha: Positive-class balancing factor.
             gamma: Focusing parameter.
+
         """
         super().__init__()
         self.alpha = float(alpha)
@@ -28,15 +30,16 @@ class FocalLossWithLogits(nn.Module):
         """Compute focal loss.
 
         Args:
+        ----
             logits: Binary logits with shape ``(B, 1)``.
             targets: Binary labels with shape ``(B, 1)``.
 
         Returns:
+        -------
             Scalar focal loss.
+
         """
-        bce_loss = functional.binary_cross_entropy_with_logits(
-            logits, targets, reduction="none"
-        )
+        bce_loss = functional.binary_cross_entropy_with_logits(logits, targets, reduction="none")
         probabilities = torch.sigmoid(logits)
         p_t = probabilities * targets + (1.0 - probabilities) * (1.0 - targets)
         alpha_t = self.alpha * targets + (1.0 - self.alpha) * (1.0 - targets)
@@ -58,11 +61,13 @@ class FocalBCEWithLogitsLoss(nn.Module):
         """Initialize combined loss.
 
         Args:
+        ----
             alpha: Positive-class balancing factor for focal loss.
             gamma: Focusing parameter for focal loss.
             focal_weight: Weight of focal loss component.
             bce_weight: Weight of BCE component.
             pos_weight: Optional positive-class weight for BCE.
+
         """
         super().__init__()
         if focal_weight < 0 or bce_weight < 0:
@@ -81,11 +86,14 @@ class FocalBCEWithLogitsLoss(nn.Module):
         """Compute combined focal/BCE loss.
 
         Args:
+        ----
             logits: Binary logits with shape ``(B, 1)``.
             targets: Binary labels with shape ``(B, 1)``.
 
         Returns:
+        -------
             Scalar combined loss.
+
         """
         loss = torch.zeros((), dtype=logits.dtype, device=logits.device)
         if self.focal_weight > 0:
@@ -99,10 +107,13 @@ def build_loss(config: Any) -> nn.Module:
     """Build loss function from Hydra config.
 
     Args:
+    ----
         config: Hydra config with a ``loss`` section.
 
     Returns:
+    -------
         PyTorch loss module.
+
     """
     loss_name = str(config.loss.name)
     if loss_name == "bce":
@@ -117,7 +128,11 @@ def build_loss(config: Any) -> nn.Module:
         bce_weight = float(getattr(config.loss, "bce_weight", 0.0))
         pos_weight_value = getattr(config.loss, "pos_weight", None)
         LOGGER.info(
-            "Using FocalBCEWithLogitsLoss: alpha=%.3f, gamma=%.3f, focal_weight=%.3f, bce_weight=%.3f, pos_weight=%s",
+            """Using FocalBCEWithLogitsLoss: alpha=%.3f,
+                                             gamma=%.3f,
+                                             focal_weight=%.3f,
+                                             bce_weight=%.3f,
+                                             pos_weight=%s""",
             float(config.loss.alpha),
             float(config.loss.gamma),
             focal_weight,

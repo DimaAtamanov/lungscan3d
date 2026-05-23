@@ -17,8 +17,10 @@ class LunaBlock(nn.Module):
         """Initialize a LUNA convolutional block.
 
         Args:
+        ----
             in_channels: Number of input channels.
             conv_channels: Number of output channels for both convolutions in the block.
+
         """
         super().__init__()
         self.conv1 = nn.Conv3d(
@@ -43,10 +45,13 @@ class LunaBlock(nn.Module):
         """Run the block forward pass.
 
         Args:
+        ----
             input_batch: Input tensor with shape ``(B, C, D, H, W)``.
 
         Returns:
+        -------
             Downsampled output tensor.
+
         """
         block_out = self.conv1(input_batch)
         block_out = self.relu1(block_out)
@@ -70,8 +75,10 @@ class LunaModel(nn.Module):
         """Initialize the DLwP LUNA baseline model.
 
         Args:
+        ----
             in_channels: Number of input channels. CT patches use one grayscale channel.
             conv_channels: Number of channels in the first convolutional block.
+
         """
         super().__init__()
         self.tail_batchnorm = nn.BatchNorm3d(1)
@@ -100,9 +107,7 @@ class LunaModel(nn.Module):
                     nonlinearity="relu",
                 )
                 if module.bias is not None:
-                    _, fan_out = nn.init._calculate_fan_in_and_fan_out(
-                        module.weight.data
-                    )
+                    _, fan_out = nn.init._calculate_fan_in_and_fan_out(module.weight.data)
                     bound = 1 / math.sqrt(fan_out)
                     nn.init.normal_(module.bias, -bound, bound)
 
@@ -110,11 +115,14 @@ class LunaModel(nn.Module):
         """Run model forward pass.
 
         Args:
+        ----
             input_batch: Input tensor with shape ``(B, 1, 32, 48, 48)``.
 
         Returns:
+        -------
             Pair ``(linear_output, probabilities)`` where ``linear_output`` has shape
             ``(B, 2)`` and ``probabilities`` is ``softmax(linear_output)``.
+
         """
         bn_output = self.tail_batchnorm(input_batch)
         block_out = self.block1(bn_output)
