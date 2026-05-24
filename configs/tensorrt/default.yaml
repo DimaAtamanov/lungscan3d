@@ -1,0 +1,9 @@
+engine_path: artifacts/tensorrt/lungscan3d.plan
+workspace_mb: 4096
+precision: fp16
+min_batch_size: 1
+opt_batch_size: 16
+max_batch_size: 64
+dry_run: false
+trtexec_path: trtexec
+extra_args: []

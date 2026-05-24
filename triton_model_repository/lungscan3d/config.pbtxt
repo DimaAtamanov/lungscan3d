@@ -1,0 +1,31 @@
+name: "lungscan3d"
+platform: "tensorrt_plan"
+max_batch_size: 64
+
+dynamic_batching {
+  preferred_batch_size: [1, 8, 16, 32, 64]
+  max_queue_delay_microseconds: 1000
+}
+
+input [
+  {
+    name: "input"
+    data_type: TYPE_FP32
+    dims: [1, 32, 48, 48]
+  }
+]
+
+output [
+  {
+    name: "logit"
+    data_type: TYPE_FP32
+    dims: [1]
+  }
+]
+
+instance_group [
+  {
+    kind: KIND_GPU
+    count: 1
+  }
+]

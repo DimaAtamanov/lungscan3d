@@ -1,0 +1,33 @@
+defaults:
+  - data: synthetic
+  - preprocessing: default
+  - model: dlwpt_baseline
+  - loss: bce
+  - trainer: default
+  - logging: default
+  - postprocess: threshold
+  - infer: onnx
+  - tensorrt: default
+  - triton: default
+  - _self_
+
+seed: 42
+project_name: lungscan3d
+
+paths:
+  data_dir: data
+  raw_dir: data/raw
+  processed_dir: data/processed
+  splits_dir: data/splits
+  examples_dir: data/examples
+  artifacts_dir: artifacts
+  plots_dir: plots
+  checkpoints_dir: artifacts/checkpoints
+
+dvc:
+  target: null
+  remote: null
+
+self_test:
+  run_pytest: true
+  pytest_args: ["-q"]

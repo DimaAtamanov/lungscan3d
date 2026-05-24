@@ -1,0 +1,12 @@
+max_epochs: 5
+learning_rate: 0.0003
+weight_decay: 0.0001
+accelerator: auto
+devices: auto
+precision: 32
+gradient_clip_val: 1.0
+log_every_n_steps: 1
+num_sanity_val_steps: 0
+fast_dev_run: false
+deterministic: false
+benchmark: false

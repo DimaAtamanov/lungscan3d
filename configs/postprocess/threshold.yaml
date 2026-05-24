@@ -1,0 +1,7 @@
+threshold: 0.35
+threshold_artifact_path: artifacts/postprocessing/threshold.json
+use_threshold_artifact: true
+threshold_selection_metric: recall_at_min_precision
+min_precision: 0.5
+min_recall: 0.8
+split: val
