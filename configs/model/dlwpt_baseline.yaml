@@ -8,8 +8,3 @@ clip_hu_min: -1000.0
 clip_hu_max: 400.0
 normalize_to: [-1.0, 1.0]
 cache_processed_patches: true
-augment:
-  random_flip: true
-  random_rotate90: true
-  gaussian_noise_std: 0.02
-  random_shift_voxels: 2

@@ -89,7 +89,7 @@ def metrics_at_threshold(
     }
 
 
-def build_threshold_grid(probabilities: np.ndarray, num_thresholds: int = 1001) -> np.ndarray:
+def build_threshold_grid(probabilities: np.ndarray, num_thresholds: int = 501) -> np.ndarray:
     """Build a stable threshold grid for optimization.
 
     The grid combines a regular ``[0, 1]`` grid with observed probability values. This makes the
@@ -277,6 +277,7 @@ def optimize_threshold(
         checkpoint_path=str(checkpoint_path),
         model=model,
         config=config,
+        weights_only=False,
     )
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     LOGGER.info("Collecting validation probabilities on device=%s", device)

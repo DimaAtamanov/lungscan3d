@@ -152,7 +152,7 @@ class LazyChunkedPatchDataset(Dataset[tuple[torch.Tensor, torch.Tensor]]):
         volume_path = self.processed_dir / str(row.volume_path)
         local_index = int(row.local_index)
         volumes = self._load_volume_chunk(volume_path)
-        volume = torch.from_numpy(np.asarray(volumes[local_index], dtype=np.float32))
+        volume = torch.from_numpy(np.asarray(volumes[local_index], dtype=np.float32).copy())
         if self.augmentation is not None:
             volume = apply_augmentations(volume, self.augmentation)
         label = torch.tensor([float(self.labels[global_index])], dtype=torch.float32)

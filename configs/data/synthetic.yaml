@@ -11,7 +11,3 @@ ensure_data: true
 
 weighted_sampling:
   enabled: true
-hard_negative_mining:
-  enabled: false
-  indices_path: artifacts/hard_negatives/train_hard_negatives.npy
-  weight_multiplier: 2.0

@@ -147,7 +147,7 @@ def preprocess_candidate_csv(
     rows = rows.sort_values("seriesuid", kind="stable").reset_index(drop=True)
     LOGGER.info("Candidate metadata columns: %s", list(rows.columns))
     LOGGER.info("Loaded %d candidate rows", len(rows))
-    LOGGER.info("Class distribution: %s", rows["class"].value_counts().to_dict())
+    LOGGER.info("Class distribution: %s", rows["label"].value_counts().to_dict())
 
     output_path = ensure_dir(output_dir)
     chunks_dir = ensure_dir(output_path / "chunks")
@@ -174,7 +174,6 @@ def preprocess_candidate_csv(
     for row in rows.itertuples(index=False):
         seriesuid = str(row.seriesuid)
         if seriesuid not in mhd_index:
-            LOGGER.warning("Skipping candidate because CT file is missing: seriesuid=%s", seriesuid)
             continue
 
         label = int(row.label)
@@ -211,11 +210,11 @@ def preprocess_candidate_csv(
                     metadata=chunk_metadata,
                 )
             )
-            LOGGER.info(
-                "Wrote preprocessing chunk %06d with %d samples",
-                chunk_index,
-                len(chunk_volumes),
-            )
+            # LOGGER.info(
+            #     "Wrote preprocessing chunk %06d with %d samples",
+            #     chunk_index,
+            #     len(chunk_volumes),
+            # )
             chunk_index += 1
             chunk_volumes.clear()
             chunk_labels.clear()
@@ -257,7 +256,7 @@ def read_mhd_volume(path: str | Path) -> tuple[np.ndarray, CtMetadata]:
     """Read an MHD CT volume with SimpleITK."""
     import SimpleITK as sitk
 
-    LOGGER.info("Reading CT volume: %s", path)
+    # LOGGER.info("Reading CT volume: %s", path)
     image = sitk.ReadImage(str(path))
     array = sitk.GetArrayFromImage(image).astype(np.float32)
     spacing_xyz = image.GetSpacing()

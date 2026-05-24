@@ -95,7 +95,9 @@ def train(config: Any) -> None:
         ],
         logger=loggers,
     )
-    LOGGER.info("Launching Lightning trainer for %s epoch(s)", config.trainer.max_epochs)
+    LOGGER.info(
+        "Launching Lightning trainer for %s epoch(s)", config.trainer.max_epochs
+    )
     trainer.fit(lightning_module, datamodule=datamodule)
     LOGGER.info(
         "Training finished. Best checkpoint: %s",

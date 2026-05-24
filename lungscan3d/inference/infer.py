@@ -42,9 +42,11 @@ def infer_patch(config: Any, input_path: str | Path) -> dict[str, float | int]:
     checkpoint_path = Path(config.infer.checkpoint_path)
     if checkpoint_path.exists():
         LOGGER.info("Loading checkpoint: %s", checkpoint_path)
-        checkpoint = torch.load(checkpoint_path, map_location="cpu")
+        checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
         state_dict = checkpoint.get("state_dict", checkpoint)
-        model_state_dict = {key.replace("model.", ""): value for key, value in state_dict.items()}
+        model_state_dict = {
+            key.replace("model.", ""): value for key, value in state_dict.items()
+        }
         model.load_state_dict(model_state_dict, strict=False)
     with torch.no_grad():
         logits = extract_positive_logits(model(input_tensor))

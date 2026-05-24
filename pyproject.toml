@@ -15,6 +15,7 @@ dependencies = [
     "omegaconf>=2.3.0",
     "onnx>=1.16.0",
     "onnxruntime>=1.17.0",
+    "onnxscript>=0.1.0",
     "pandas>=2.2.0",
     "pytorch-lightning>=2.2.0",
     "scikit-learn>=1.4.0",
@@ -32,9 +33,7 @@ dev = [
     "ruff>=0.4.0",
     "build>=1.2.1",
 ]
-triton = [
-    "tritonclient[http]>=2.44.0",
-]
+triton = ["tritonclient[http]>=2.44.0"]
 
 [project.scripts]
 lungscan3d = "lungscan3d.commands:main"
@@ -53,9 +52,7 @@ src = ["lungscan3d", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "D", "ANN", "RUF"]
-ignore = [
-    "D100", "D104", "D203", "D213", "ANN101", "ANN102", "ANN401",
-]
+ignore = ["D100", "D104", "D203", "D213", "ANN101", "ANN102", "ANN401"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["D", "ANN"]

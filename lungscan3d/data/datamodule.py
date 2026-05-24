@@ -151,7 +151,7 @@ class LungScanDataModule(pl.LightningDataModule if pl is not None else object):
         positive_weight = len(labels) / (2.0 * positive_count)
         negative_weight = len(labels) / (2.0 * negative_count)
         sample_weights = torch.where(labels > 0.5, positive_weight, negative_weight)
-        sample_weights = self._apply_hard_negative_weights(sample_weights, labels)
+
         LOGGER.info(
             "Using weighted sampling: positive_weight=%.4f, negative_weight=%.4f",
             float(positive_weight),
@@ -162,39 +162,6 @@ class LungScanDataModule(pl.LightningDataModule if pl is not None else object):
             num_samples=len(sample_weights),
             replacement=True,
         )
-
-    def _apply_hard_negative_weights(
-        self, sample_weights: torch.Tensor, labels: torch.Tensor
-    ) -> torch.Tensor:
-        """Increase sampling weights for previously selected hard negatives."""
-        hard_negative_config = getattr(self.config.data, "hard_negative_mining", None)
-        if hard_negative_config is None or not bool(hard_negative_config.enabled):
-            return sample_weights
-
-        indices_path = Path(str(hard_negative_config.indices_path))
-        if not indices_path.exists():
-            LOGGER.info(
-                "Hard negative indices were not found at %s; using class-balanced sampler only",
-                indices_path,
-            )
-            return sample_weights
-
-        indices = np.load(indices_path).astype(np.int64)
-        valid_indices = indices[(indices >= 0) & (indices < len(sample_weights))]
-        if len(valid_indices) == 0:
-            LOGGER.info("Hard negative file %s contains no valid train indices", indices_path)
-            return sample_weights
-
-        negative_mask = labels[torch.as_tensor(valid_indices)] < 0.5
-        selected_indices = torch.as_tensor(valid_indices, dtype=torch.long)[negative_mask]
-        multiplier = float(hard_negative_config.weight_multiplier)
-        sample_weights[selected_indices] = sample_weights[selected_indices] * multiplier
-        LOGGER.info(
-            "Applied hard negative mining weights to %d negatives with multiplier=%.2f",
-            len(selected_indices),
-            multiplier,
-        )
-        return sample_weights
 
     def train_dataloader(self) -> DataLoader[tuple[Any, Any]]:
         """Return train dataloader."""

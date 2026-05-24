@@ -356,28 +356,6 @@ loss:
 
 1. **Weighted sampling** в train dataloader: положительные и отрицательные кандидаты получают веса, обратные частотам классов.
 2. **Focal Loss** для усиления вклада сложных примеров.
-3. **Hard negative mining** через сохранённый список сложных отрицательных примеров: выбранные ложные кандидаты могут получать повышенный sampling weight в следующем запуске обучения.
-
-Команда для выбора hard negatives из сохранённых массивов меток и вероятностей (доступно после первого обучения):
-
-```bash
-lungscan3d select-hard-negatives \
-  --labels=artifacts/predictions/train_labels.npy \
-  --probabilities=artifacts/predictions/train_probabilities.npy \
-  --output=artifacts/hard_negatives/train_hard_negatives.npy \
-  --top-fraction=0.25 \
-  --min-probability=0.5
-```
-
-После этого можно включить hard negative sampling:
-
-```bash
-lungscan3d train \
-  data=luna16 \
-  model=resnet3d_se \
-  loss=focal \
-  data.hard_negative_mining.enabled=true
-```
 
 ## 1.9.3. Аугментации и обучение
 
@@ -447,7 +425,7 @@ preprocessing:
 Подбор порога выполняется отдельной командой:
 
 ```bash
-lungscan3d optimize-threshold data=luna16 checkpoint=artifacts/checkpoints/best.ckpt split=val
+lungscan3d optimize-threshold data=luna16 --checkpoint=artifacts/checkpoints/best.ckpt --split=val
 ```
 
 Стратегия по умолчанию:
@@ -1010,8 +988,8 @@ lungscan3d infer data/examples/sample_patch.npy
 
 ```bash
 lungscan3d export-onnx \
-  checkpoint=artifacts/checkpoints/best.ckpt \
-  output=artifacts/onnx/lungscan3d.onnx
+  --checkpoint=artifacts/checkpoints/best.ckpt \
+  --output=artifacts/onnx/lungscan3d.onnx
 ```
 
 После экспорта выполняются проверки:
@@ -1038,7 +1016,7 @@ TensorRT export требует:
 - доступный `trtexec`.
 
 ```bash
-lungscan3d export-tensorrt output=artifacts/tensorrt/lungscan3d.engine
+lungscan3d export-tensorrt --output=artifacts/tensorrt/lungscan3d.engine
 ```
 
 Или shell-обёртка:

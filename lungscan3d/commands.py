@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Any
 
 import fire
-import numpy as np
 from hydra import compose, initialize_config_dir
 from omegaconf import DictConfig, OmegaConf
 
@@ -19,10 +18,6 @@ from lungscan3d.inference.onnx_export import export_onnx
 from lungscan3d.inference.thresholds import optimize_threshold as run_optimize_threshold
 from lungscan3d.inference.trt_export import export_tensorrt
 from lungscan3d.serving.triton_client import call_triton
-from lungscan3d.training.hard_negative_mining import save_hard_negative_indices
-from lungscan3d.training.hard_negative_mining import (
-    select_hard_negative_indices as run_select_hard_negative_indices,
-)
 from lungscan3d.training.train import train as run_train
 from lungscan3d.utils.dvc import dvc_add as run_dvc_add
 from lungscan3d.utils.dvc import dvc_pull as run_dvc_pull
@@ -222,36 +217,6 @@ class Commands:
             output=output,
         )
         print(json.dumps(asdict(result), indent=2))
-
-    def select_hard_negatives(
-        self,
-        labels: str,
-        probabilities: str,
-        output: str = "artifacts/hard_negatives/train_hard_negatives.npy",
-        top_fraction: float = 0.25,
-        min_probability: float = 0.5,
-    ) -> None:
-        """Select hard negatives from saved labels and model probabilities.
-
-        Args:
-        ----
-            labels: Path to ``.npy`` array with binary labels.
-            probabilities: Path to ``.npy`` array with positive-class probabilities.
-            output: Destination path for selected hard-negative indices.
-            top_fraction: Fraction of the hardest negative examples to keep.
-            min_probability: Minimum positive-class probability for a negative example.
-
-        """
-        label_array = np.load(labels)
-        probability_array = np.load(probabilities)
-        indices = run_select_hard_negative_indices(
-            labels=label_array,
-            probabilities=probability_array,
-            top_fraction=top_fraction,
-            min_probability=min_probability,
-        )
-        save_hard_negative_indices(indices, output)
-        print(json.dumps({"output": output, "num_hard_negatives": int(len(indices))}, indent=2))
 
     def export_onnx(
         self,
