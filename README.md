@@ -536,7 +536,7 @@ cd lungscan3d
 Базовая установка для разработки:
 
 ```bash
-uv sync --extra dev --extra triton
+uv sync --extra dev --extra triton --extra tensorrt
 uv run lungscan3d show-config
 ```
 

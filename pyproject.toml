@@ -36,7 +36,6 @@ dev = [
 ]
 triton = ["tritonclient[http]>=2.44.0"]
 tensorrt = ["tensorrt>=10.0.0"]
-serve = ["tritonclient[http]>=2.44.0", "tensorrt>=10.0.0"]
 
 [project.scripts]
 lungscan3d = "lungscan3d.commands:main"
