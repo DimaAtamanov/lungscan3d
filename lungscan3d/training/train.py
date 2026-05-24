@@ -91,6 +91,16 @@ def train(config: Any) -> None:
         save_last=False,
         auto_insert_metric_name=False,
     )
+
+    callbacks = [
+        checkpoint,
+        EarlyStopping(monitor="val/loss", mode="min", patience=5),
+        metrics_history,
+    ]
+
+    if loggers:
+        callbacks.append(LearningRateMonitor(logging_interval="epoch"))
+
     trainer = pl.Trainer(
         max_epochs=int(config.trainer.max_epochs),
         accelerator=str(config.trainer.accelerator),
@@ -102,15 +112,13 @@ def train(config: Any) -> None:
         fast_dev_run=bool(config.trainer.fast_dev_run),
         deterministic=bool(config.trainer.deterministic),
         benchmark=bool(config.trainer.benchmark),
-        callbacks=[
-            checkpoint,
-            EarlyStopping(monitor="val/loss", mode="min", patience=5),
-            LearningRateMonitor(logging_interval="epoch"),
-            metrics_history,
-        ],
+        callbacks=callbacks,
         logger=loggers,
     )
-    LOGGER.info("Launching Lightning trainer for %s epoch(s)", config.trainer.max_epochs)
+
+    LOGGER.info(
+        "Launching Lightning trainer for %s epoch(s)", config.trainer.max_epochs
+    )
     trainer.fit(lightning_module, datamodule=datamodule)
     best_checkpoint_path = checkpoint.best_model_path
     LOGGER.info(
@@ -119,7 +127,9 @@ def train(config: Any) -> None:
     )
 
     if best_checkpoint_path:
-        LOGGER.info("Loading best checkpoint for test evaluation: %s", best_checkpoint_path)
+        LOGGER.info(
+            "Loading best checkpoint for test evaluation: %s", best_checkpoint_path
+        )
         test_module = LungScanLightningModule.load_from_checkpoint(
             checkpoint_path=str(best_checkpoint_path),
             model=model,
