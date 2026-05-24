@@ -110,9 +110,7 @@ def train(config: Any) -> None:
         ],
         logger=loggers,
     )
-    LOGGER.info(
-        "Launching Lightning trainer for %s epoch(s)", config.trainer.max_epochs
-    )
+    LOGGER.info("Launching Lightning trainer for %s epoch(s)", config.trainer.max_epochs)
     trainer.fit(lightning_module, datamodule=datamodule)
     best_checkpoint_path = checkpoint.best_model_path
     LOGGER.info(
@@ -121,9 +119,7 @@ def train(config: Any) -> None:
     )
 
     if best_checkpoint_path:
-        LOGGER.info(
-            "Loading best checkpoint for test evaluation: %s", best_checkpoint_path
-        )
+        LOGGER.info("Loading best checkpoint for test evaluation: %s", best_checkpoint_path)
         test_module = LungScanLightningModule.load_from_checkpoint(
             checkpoint_path=str(best_checkpoint_path),
             model=model,

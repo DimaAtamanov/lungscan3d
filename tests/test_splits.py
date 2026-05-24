@@ -1,6 +1,5 @@
 import numpy as np
 import pytest
-
 from lungscan3d.data.splits import assert_disjoint_groups, split_indices_by_group
 
 

@@ -49,7 +49,7 @@ def _build_trtexec_command(
     """Build a deterministic trtexec command from Hydra config."""
     input_name = str(config.infer.input_name)
     channels = int(config.model.in_channels)
-    depth, height, width = [int(value) for value in config.data.patch_size]
+    depth, height, width = (int(value) for value in config.data.patch_size)
     min_batch = int(config.tensorrt.min_batch_size)
     opt_batch = int(config.tensorrt.opt_batch_size)
     max_batch = int(config.tensorrt.max_batch_size)

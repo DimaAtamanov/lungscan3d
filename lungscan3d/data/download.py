@@ -3,15 +3,14 @@
 import logging
 import urllib.request
 import zipfile
-from pathlib import Path
 from collections.abc import Sequence
+from pathlib import Path
 from typing import Any
 
 import numpy as np
-from tqdm.auto import tqdm
-
 from lungscan3d.utils.dvc import dvc_pull
 from lungscan3d.utils.paths import ensure_dir
+from tqdm.auto import tqdm
 
 LOGGER = logging.getLogger(__name__)
 

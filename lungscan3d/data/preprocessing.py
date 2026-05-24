@@ -9,9 +9,8 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
-from tqdm.auto import tqdm
-
 from lungscan3d.utils.paths import ensure_dir
+from tqdm.auto import tqdm
 
 LOGGER = logging.getLogger(__name__)
 

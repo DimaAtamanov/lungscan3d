@@ -12,9 +12,7 @@ LOGGER = logging.getLogger(__name__)
 
 def call_triton(config: Any, input: str) -> None:
     """Call Triton HTTP endpoint for a preprocessed patch."""
-    LOGGER.info(
-        "Calling Triton server: url=%s, input=%s", config.triton.client_url, input
-    )
+    LOGGER.info("Calling Triton server: url=%s, input=%s", config.triton.client_url, input)
 
     import tritonclient.http as httpclient
     from tritonclient.utils import np_to_triton_dtype

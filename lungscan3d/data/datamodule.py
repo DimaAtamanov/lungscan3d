@@ -126,7 +126,6 @@ class LungScanDataModule(pl.LightningDataModule if pl is not None else object):
             int(len(self.train_labels) - self.train_labels.sum()),
         )
 
-
     def _build_split_indices(
         self,
         processed_dir: Path,
