@@ -4,9 +4,11 @@ defaults:
   - model: dlwpt_baseline
   - loss: bce
   - trainer: default
-  - logging: mlflow_tensorboard
+  - logging: default
   - postprocess: threshold
   - infer: onnx
+  - tensorrt: default
+  - triton: default
   - _self_
 
 seed: 42
@@ -22,4 +24,10 @@ paths:
   plots_dir: plots
   checkpoints_dir: artifacts/checkpoints
 
-triton_client: localhost:8000
+dvc:
+  target: null
+  remote: null
+
+self_test:
+  run_pytest: true
+  pytest_args: ["-q"]

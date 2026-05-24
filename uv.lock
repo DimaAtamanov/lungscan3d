@@ -1537,7 +1537,6 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "dvc" },
-    { name = "fire" },
     { name = "hydra-core" },
     { name = "matplotlib" },
     { name = "mlflow" },
@@ -1552,6 +1551,7 @@ dependencies = [
     { name = "tensorboard" },
     { name = "torch" },
     { name = "torchmetrics" },
+    { name = "tqdm" },
 ]
 
 [package.optional-dependencies]
@@ -1562,6 +1562,13 @@ dev = [
     { name = "pytest-cov" },
     { name = "ruff" },
 ]
+serve = [
+    { name = "tensorrt" },
+    { name = "tritonclient", extra = ["http"] },
+]
+tensorrt = [
+    { name = "tensorrt" },
+]
 triton = [
     { name = "tritonclient", extra = ["http"] },
 ]
@@ -1570,7 +1577,6 @@ triton = [
 requires-dist = [
     { name = "build", marker = "extra == 'dev'", specifier = ">=1.2.1" },
     { name = "dvc", specifier = ">=3.50.0" },
-    { name = "fire", specifier = ">=0.6.0" },
     { name = "hydra-core", specifier = ">=1.3.2" },
     { name = "matplotlib", specifier = ">=3.8.0" },
     { name = "mlflow", specifier = ">=2.12.0" },
@@ -1587,11 +1593,13 @@ requires-dist = [
     { name = "scikit-learn", specifier = ">=1.4.0" },
     { name = "simpleitk", specifier = ">=2.3.0" },
     { name = "tensorboard", specifier = ">=2.16.0" },
+    { name = "tensorrt", marker = "extra == 'serve' or extra == 'tensorrt'", specifier = ">=10.0.0" },
     { name = "torch", specifier = ">=2.2.0" },
     { name = "torchmetrics", specifier = ">=1.3.0" },
-    { name = "tritonclient", extras = ["http"], marker = "extra == 'triton'", specifier = ">=2.44.0" },
+    { name = "tqdm", specifier = ">=4.66.0" },
+    { name = "tritonclient", extras = ["http"], marker = "extra == 'serve' or extra == 'triton'", specifier = ">=2.44.0" },
 ]
-provides-extras = ["dev", "triton"]
+provides-extras = ["dev", "serve", "tensorrt", "triton"]
 
 [[package]]
 name = "mako"

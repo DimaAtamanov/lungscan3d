@@ -1,12 +1,11 @@
 """PyTorch Lightning data module."""
 
-from __future__ import annotations
-
 import logging
 from pathlib import Path
 from typing import Any
 
 import numpy as np
+import pandas as pd
 import torch
 from torch.utils.data import DataLoader, WeightedRandomSampler
 
@@ -25,7 +24,12 @@ from lungscan3d.data.dataset import (
 )
 from lungscan3d.data.download import download_data
 from lungscan3d.data.preprocessing import preprocess
-from lungscan3d.data.splits import split_indices
+from lungscan3d.data.splits import (
+    assert_disjoint_groups,
+    save_split_indices,
+    split_indices,
+    split_indices_by_group,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -91,12 +95,10 @@ class LungScanDataModule(pl.LightningDataModule if pl is not None else object):
         else:
             volumes, labels = load_patch_arrays(processed_dir)
 
-        train_idx, val_idx, test_idx = split_indices(
-            num_items=len(labels),
-            train_fraction=float(self.config.data.train_fraction),
-            val_fraction=float(self.config.data.val_fraction),
-            test_fraction=float(self.config.data.test_fraction),
-            seed=int(self.config.seed),
+        train_idx, val_idx, test_idx = self._build_split_indices(
+            processed_dir=processed_dir,
+            labels=labels,
+            uses_chunked_arrays=uses_chunked_arrays,
         )
         augmentation = self._build_train_augmentation()
 
@@ -123,6 +125,71 @@ class LungScanDataModule(pl.LightningDataModule if pl is not None else object):
             int(self.train_labels.sum()),
             int(len(self.train_labels) - self.train_labels.sum()),
         )
+
+
+    def _build_split_indices(
+        self,
+        processed_dir: Path,
+        labels: np.ndarray,
+        uses_chunked_arrays: bool,
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Build row or patient-level splits and persist them when configured."""
+        groups: np.ndarray | None = None
+        split_by_patient = bool(getattr(self.config.data, "split_by_patient", False))
+        if split_by_patient:
+            if not uses_chunked_arrays:
+                LOGGER.warning(
+                    "data.split_by_patient=true was requested, but legacy arrays do not "
+                    "contain patient ids; falling back to row-level splitting"
+                )
+            else:
+                manifest = pd.read_csv(processed_dir / "manifest.csv")
+                group_column = str(getattr(self.config.data, "group_column", "seriesuid"))
+                if group_column not in manifest.columns:
+                    raise ValueError(f"Manifest does not contain group column: {group_column}")
+                groups = manifest[group_column].astype(str).to_numpy()
+                train_idx, val_idx, test_idx = split_indices_by_group(
+                    groups=groups,
+                    train_fraction=float(self.config.data.train_fraction),
+                    val_fraction=float(self.config.data.val_fraction),
+                    test_fraction=float(self.config.data.test_fraction),
+                    seed=int(self.config.seed),
+                )
+                assert_disjoint_groups(groups, train_idx, val_idx, test_idx)
+                LOGGER.info(
+                    "Using patient-level split by %s: train_groups=%d, "
+                    "val_groups=%d, test_groups=%d",
+                    group_column,
+                    len(set(groups[train_idx])),
+                    len(set(groups[val_idx])),
+                    len(set(groups[test_idx])),
+                )
+                self._save_splits_if_requested(train_idx, val_idx, test_idx, groups)
+                return train_idx, val_idx, test_idx
+
+        train_idx, val_idx, test_idx = split_indices(
+            num_items=len(labels),
+            train_fraction=float(self.config.data.train_fraction),
+            val_fraction=float(self.config.data.val_fraction),
+            test_fraction=float(self.config.data.test_fraction),
+            seed=int(self.config.seed),
+        )
+        self._save_splits_if_requested(train_idx, val_idx, test_idx, groups)
+        return train_idx, val_idx, test_idx
+
+    def _save_splits_if_requested(
+        self,
+        train_idx: np.ndarray,
+        val_idx: np.ndarray,
+        test_idx: np.ndarray,
+        groups: np.ndarray | None,
+    ) -> None:
+        """Persist split indices when data.save_splits is enabled."""
+        if not bool(getattr(self.config.data, "save_splits", True)):
+            return
+        split_dir = Path(self.config.paths.splits_dir) / str(self.config.data.name)
+        save_split_indices(split_dir, train_idx, val_idx, test_idx, groups=groups)
+        LOGGER.info("Saved split indices to %s", split_dir)
 
     def _build_train_augmentation(self) -> AugmentationConfig | None:
         """Build augmentation configuration for the training dataset."""

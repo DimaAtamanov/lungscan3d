@@ -3,11 +3,14 @@ raw_dir: data/raw/luna16
 candidates_csv: data/raw/luna16/candidates.csv
 processed_dir: data/processed/luna16
 patch_size: [32, 48, 48]
-batch_size: 128
-num_workers: 4
+batch_size: 64
+num_workers: 2
 train_fraction: 0.7
 val_fraction: 0.15
 test_fraction: 0.15
+split_by_patient: true
+group_column: seriesuid
+save_splits: true
 ensure_data: true
 task: nodule_vs_non_nodule
 dvc_target: data/processed/luna16

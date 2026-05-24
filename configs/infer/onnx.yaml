@@ -1,5 +1,6 @@
 checkpoint_path: artifacts/checkpoints/best.ckpt
 onnx_path: artifacts/onnx/lungscan3d.onnx
+input_path: null
 output_name: logit
 input_name: input
 opset_version: 17

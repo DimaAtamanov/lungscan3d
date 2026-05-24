@@ -9,6 +9,8 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+from tqdm.auto import tqdm
+
 from lungscan3d.utils.paths import ensure_dir
 
 LOGGER = logging.getLogger(__name__)
@@ -105,6 +107,7 @@ def preprocess(config: Any) -> None:
             task=str(config.data.task),
             chunk_size=int(getattr(config.preprocessing, "chunk_size", 512)),
             max_cached_ct_volumes=int(getattr(config.preprocessing, "max_cached_ct_volumes", 1)),
+            progress=bool(getattr(config.preprocessing, "progress", True)),
         )
         return
 
@@ -121,6 +124,7 @@ def preprocess_candidate_csv(
     task: str,
     chunk_size: int = 512,
     max_cached_ct_volumes: int = 1,
+    progress: bool = True,
 ) -> None:
     """Preprocess candidate rows into disk-backed chunks suitable for training.
 
@@ -171,7 +175,16 @@ def preprocess_candidate_csv(
     volume_cache: OrderedDict[str, tuple[np.ndarray, CtMetadata]] = OrderedDict()
     chunk_index = 0
 
-    for row in rows.itertuples(index=False):
+    iterator = rows.itertuples(index=False)
+    if progress:
+        iterator = tqdm(
+            iterator,
+            total=len(rows),
+            desc="Preprocessing LUNA16 candidates",
+            unit="candidate",
+        )
+
+    for row in iterator:
         seriesuid = str(row.seriesuid)
         if seriesuid not in mhd_index:
             continue
@@ -210,11 +223,11 @@ def preprocess_candidate_csv(
                     metadata=chunk_metadata,
                 )
             )
-            # LOGGER.info(
-            #     "Wrote preprocessing chunk %06d with %d samples",
-            #     chunk_index,
-            #     len(chunk_volumes),
-            # )
+            LOGGER.info(
+                "Wrote preprocessing chunk %06d with %d samples",
+                chunk_index,
+                len(chunk_volumes),
+            )
             chunk_index += 1
             chunk_volumes.clear()
             chunk_labels.clear()

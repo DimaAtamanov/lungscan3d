@@ -1,13 +1,15 @@
 """Data download and synthetic data generation utilities."""
 
 import logging
-import shutil
 import urllib.request
 import zipfile
 from pathlib import Path
+from collections.abc import Sequence
 from typing import Any
 
 import numpy as np
+from tqdm.auto import tqdm
+
 from lungscan3d.utils.dvc import dvc_pull
 from lungscan3d.utils.paths import ensure_dir
 
@@ -55,7 +57,14 @@ def generate_synthetic_dataset(
     z_grid, y_grid, x_grid = np.ogrid[:depth, :height, :width]
     center = np.array([depth, height, width], dtype=np.float32) / 2.0
 
-    for sample_index, label in enumerate(labels):
+    iterator = tqdm(
+        enumerate(labels),
+        total=len(labels),
+        desc="Generating synthetic positives",
+        unit="sample",
+        leave=False,
+    )
+    for sample_index, label in iterator:
         if label < 0.5:
             continue
         jitter = rng.normal(loc=0.0, scale=2.0, size=3)
@@ -81,13 +90,15 @@ def generate_synthetic_dataset(
     )
 
 
-def parse_subset_selection(subsets: str | None, max_subsets: int | None) -> list[int]:
+def parse_subset_selection(
+    subsets: str | int | Sequence[int] | None, max_subsets: int | None
+) -> list[int]:
     """Parse requested LUNA16 subset ids.
 
     Args:
     ----
-        subsets: Comma-separated subset ids, for example ``"0,1,2"``. ``None`` means
-            use ``max_subsets`` or all subsets.
+        subsets: Comma-separated subset ids, an integer id, or a list like ``[0, 1, 2]``.
+            ``None`` means use ``max_subsets`` or all subsets.
         max_subsets: Optional number of first subsets to download.
 
     Returns:
@@ -99,8 +110,12 @@ def parse_subset_selection(subsets: str | None, max_subsets: int | None) -> list
         ValueError: If subset ids are invalid.
 
     """
-    if subsets:
+    if isinstance(subsets, str) and subsets:
         subset_ids = sorted({int(value.strip()) for value in subsets.split(",") if value.strip()})
+    elif isinstance(subsets, int):
+        subset_ids = [int(subsets)]
+    elif subsets:
+        subset_ids = sorted({int(value) for value in subsets})
     elif max_subsets is not None:
         subset_ids = list(range(int(max_subsets)))
     else:
@@ -147,7 +162,20 @@ def _download_file(url: str, target_path: Path, overwrite: bool) -> None:
     ensure_dir(target_path.parent)
     LOGGER.info("Downloading %s -> %s", url, target_path)
     with urllib.request.urlopen(url) as response, target_path.open("wb") as output_file:
-        shutil.copyfileobj(response, output_file, length=1024 * 1024)
+        total = int(response.headers.get("Content-Length") or 0)
+        with tqdm(
+            total=total or None,
+            unit="B",
+            unit_scale=True,
+            unit_divisor=1024,
+            desc=target_path.name,
+        ) as progress:
+            while True:
+                chunk = response.read(1024 * 1024)
+                if not chunk:
+                    break
+                output_file.write(chunk)
+                progress.update(len(chunk))
     LOGGER.info("Downloaded %s (%.2f MB)", target_path, target_path.stat().st_size / 1024 / 1024)
 
 
@@ -167,7 +195,9 @@ def _extract_zip(zip_path: Path, output_dir: Path, overwrite: bool) -> None:
         return
     LOGGER.info("Extracting %s -> %s", zip_path, output_dir)
     with zipfile.ZipFile(zip_path) as archive:
-        archive.extractall(output_dir)
+        members = archive.infolist()
+        for member in tqdm(members, desc=f"Extracting {zip_path.name}", unit="file"):
+            archive.extract(member, output_dir)
     LOGGER.info("Extracted %s", zip_path.name)
 
 
@@ -188,7 +218,7 @@ def download_luna16_dataset(
     Args:
     ----
         raw_dir: Destination directory, normally ``data/raw/luna16``.
-        subsets: Comma-separated subset ids to download, for example ``"0,1"``.
+        subsets: Subset ids to download, for example ``"0,1"`` or ``[0, 1]``.
         max_subsets: Optional number of first subsets to download when ``subsets`` is
             not provided.
         include_metadata: Whether to download ``annotations.csv`` and ``candidates.csv``.
@@ -203,10 +233,10 @@ def download_luna16_dataset(
     LOGGER.info("Selected subsets: %s", subset_ids)
 
     if include_metadata:
-        for filename in LUNA16_METADATA_FILES:
+        for filename in tqdm(LUNA16_METADATA_FILES, desc="LUNA16 metadata", unit="file"):
             _download_file(_zenodo_url(filename), output_dir / filename, overwrite=overwrite)
 
-    for subset_id in subset_ids:
+    for subset_id in tqdm(subset_ids, desc="LUNA16 subsets", unit="subset"):
         filename = LUNA16_SUBSET_FILES[subset_id]
         archive_path = output_dir / filename
         _download_file(_zenodo_url(filename), archive_path, overwrite=overwrite)
@@ -262,6 +292,7 @@ def download_data(config: Any) -> None:
 
     raise FileNotFoundError(
         f"Dataset '{data_name}' is not bundled and DVC pull did not restore it. "
-        "Either run `lungscan3d download-luna16 --subsets=0`, prepare LUNA16 raw files "
+        "Either run `lungscan3d download-luna16 data=luna16 data.download_subsets=0`, "
+        "prepare LUNA16 raw files "
         "manually as described in README.md, or use data=synthetic for a smoke test."
     )

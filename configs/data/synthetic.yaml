@@ -7,6 +7,9 @@ num_workers: 0
 train_fraction: 0.7
 val_fraction: 0.15
 test_fraction: 0.15
+split_by_patient: false
+group_column: seriesuid
+save_splits: true
 ensure_data: true
 
 weighted_sampling:

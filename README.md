@@ -384,7 +384,7 @@ Training pipeline использует:
 - mixed precision через `trainer.precision`, например `16-mixed`;
 - `ReduceLROnPlateau` learning-rate scheduler;
 - gradient clipping через `trainer.gradient_clip_val`;
-- MLflow и TensorBoard loggers;
+- опциональные loggers: `logging.mode=none`, `logging.mode=mlflow`, `logging.mode=tensorboard`, `logging.mode=all`;
 - сохранение лучшего checkpoint по `val/loss`.
 
 ## 1.10. Препроцессинг
@@ -425,7 +425,7 @@ preprocessing:
 Подбор порога выполняется отдельной командой:
 
 ```bash
-lungscan3d optimize-threshold data=luna16 --checkpoint=artifacts/checkpoints/best.ckpt --split=val
+lungscan3d optimize-threshold data=luna16 infer.checkpoint_path=artifacts/checkpoints/best.ckpt postprocess.split=val
 ```
 
 Стратегия по умолчанию:
@@ -480,715 +480,702 @@ artifacts/postprocessing/threshold.json
 
 # 2. Техническая часть
 
-## 2.1. Стек технологий
+Эта часть README — практический manual по пакету. Все команды запускаются через установленный entrypoint `lungscan3d`. После установки пакета команда доступна как обычная CLI-команда окружения.
 
-### Язык и пакетирование
-
-- Python `>=3.11,<3.13`;
-- `uv` для управления зависимостями и lock-файлом;
-- `hatchling` как build backend;
-- `pyproject.toml` как единый конфигурационный файл проекта.
-
-### Машинное обучение
-
-- PyTorch;
-- PyTorch Lightning;
-- TorchMetrics;
-- NumPy;
-- Pandas;
-- Scikit-learn;
-- SimpleITK.
-
-### Конфигурация и воспроизводимость
-
-- Hydra;
-- OmegaConf;
-- DVC;
-
-### Логирование
-
-- стандартный Python `logging` для пользовательских CLI-логов;
-- MLflow для experiment tracking;
-- TensorBoard для локального просмотра обучения;
-- matplotlib-графики в `plots/`.
-
-### Качество кода
-
-- pre-commit;
-- ruff;
-- pytest;
-- pytest-cov;
-- type annotations;
-- Google-style docstrings.
-
-### Production inference
-
-- ONNX;
-- ONNX Runtime;
-- TensorRT;
-- Triton Inference Server.
-
----
-
-# 3. Структура репозитория
+## 2.1. Где что лежит
 
 ```text
-lung-scan-3d/
-├── .dvc/
-│   └── config
-├── .github/
-│   └── workflows/
-│       └── ci.yml
-├── configs/
-│   ├── config.yaml
-│   ├── data/
-│   │   ├── luna16.yaml
-│   │   └── synthetic.yaml
-│   ├── preprocessing/
-│   │   └── default.yaml
-│   ├── model/
-│   │   ├── dlwpt_baseline.yaml
-│   │   └── resnet3d_se.yaml
-│   ├── trainer/
-│   │   └── default.yaml
-│   ├── loss/
-│   │   ├── bce.yaml
-│   │   └── focal.yaml
-│   ├── logging/
-│   │   └── mlflow_tensorboard.yaml
-│   ├── postprocess/
-│   │   └── threshold.yaml
-│   └── infer/
-│       └── onnx.yaml
-├── data/
-│   └── .gitkeep
+lungscan3d/
+├── configs/                         # Hydra-конфиги всех режимов запуска
+│   ├── config.yaml                   # корневой конфиг и defaults
+│   ├── data/                         # synthetic / LUNA16, batch, split, download
+│   ├── infer/                        # ONNX/input/output/checkpoint параметры
+│   ├── logging/                      # default.yaml: mode/ports/URI для логгеров
+│   ├── loss/                         # BCE и focal loss
+│   ├── model/                        # 3D baseline и ResNet3D-SE
+│   ├── postprocess/                  # threshold и подбор порога
+│   ├── preprocessing/                # HU clipping, patch size, chunking, progress
+│   ├── tensorrt/                     # trtexec, dynamic shapes, precision, engine path
+│   ├── trainer/                      # PyTorch Lightning trainer
+│   └── triton/                       # Triton repository/client/docker параметры
 ├── lungscan3d/
-│   ├── commands.py
-│   ├── data/
-│   ├── models/
-│   ├── training/
-│   ├── inference/
-│   ├── serving/
-│   └── utils/
-├── plots/
-│   └── .gitkeep
-├── scripts/
-├── tests/
-├── triton_model_repository/
-├── .gitignore
-├── .pre-commit-config.yaml
-├── dvc.yaml
-├── infer.py
-├── pyproject.toml
-├── README.md
-└── uv.lock
+│   ├── commands.py                   # единый Hydra-first CLI entrypoint
+│   ├── data/                         # download, preprocessing, dataset, patient split
+│   ├── inference/                    # infer, ONNX export, TensorRT export, thresholds
+│   ├── models/                       # архитектуры моделей
+│   ├── serving/                      # Triton HTTP client
+│   ├── training/                     # Lightning module, train loop, callbacks, plots
+│   └── utils/                        # DVC, git, logging, paths
+├── scripts/                          # thin wrappers around lungscan3d / сервисы
+├── tests/                            # unit/smoke проверки
+├── triton_model_repository/          # Triton model repository
+├── dvc.yaml                          # DVC stage для препроцессинга LUNA16
+├── pyproject.toml                    # зависимости, entrypoint, dev extras
+└── README.md                         # этот manual
 ```
 
----
+## 2.2. Сборка, настройка окружения, установка пакета
 
-# 4. Установка, сборка и установка пакета
+CLI entrypoint у пакета всегда называется `lungscan3d`, но разворачивать окружение, фиксировать зависимости и собирать пакет рекомендуется через `uv`. Это даёт воспроизводимое окружение по `uv.lock` и одинаковый workflow на локальной машине, CI и сервере.
 
-## 4.1. Требования
-
-Необходимо установить:
-
-- Python 3.11;
-- `uv`;
-- `git`;
-- DVC;
-- опционально CUDA/TensorRT для production GPU inference.
+Подготовка к работе:
 
 Установка `uv`:
 
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
-
-Проверка:
-
-```bash
-uv --version
-```
-
-## 4.2. Клонирование репозитория
+Клонирование репозитория
 
 ```bash
 git clone https://github.com/DimaAtamanov/lungscan3d.git
 cd lungscan3d
 ```
 
-## 4.3. Установка окружения разработки
+Базовая установка для разработки:
 
 ```bash
-uv sync --extra dev
+uv sync --extra dev --extra triton
+uv run lungscan3d show-config
+```
+
+После `uv sync` можно либо запускать команды через `uv run lungscan3d ...`, либо активировать виртуальное окружение и пользоваться чистым entrypoint `lungscan3d`:
+
+```bash
 source .venv/bin/activate
-```
-
-После активации окружения все команды запускаются как команды установленного Python-пакета, без `uv run`:
-
-```bash
 lungscan3d show-config
-lungscan3d train data=synthetic trainer.max_epochs=3
 ```
 
-## 4.4. Сборка wheel/sdist
-
-Так как проект использует `uv`, предпочтительная команда сборки:
+Сборка wheel/sdist также выполняется через `uv`:
 
 ```bash
 uv build
 ```
 
-`uv build` читает стандартный блок `[build-system]` из `pyproject.toml` и использует указанный backend `hatchling`. Альтернативная PEP 517-команда тоже корректна, если установлен пакет `build`:
+Для TensorRT-конвертации есть две части:
+
+1. Python-зависимости проекта:
 
 ```bash
-python -m build
+uv sync --extra dev --extra triton --extra tensorrt
 ```
 
-После сборки появятся артефакты:
+2. Системный NVIDIA TensorRT CLI `trtexec`. Python-пакет не всегда кладёт `trtexec` в `PATH`, поэтому проверка обязательна:
+
+```bash
+uv run python -c "import tensorrt; print(tensorrt.__version__)"
+nvidia-smi
+trtexec --version
+```
+
+Если `trtexec` отсутствует, установите TensorRT на хост или выполняйте экспорт в NVIDIA TensorRT container. Для Triton нужен Docker с NVIDIA Container Toolkit:
+
+```bash
+docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi
+```
+
+Triton client-зависимости ставятся тем же способом:
+
+```bash
+uv sync --extra dev --extra triton
+```
+
+## 2.3. Общая модель CLI
+
+```bash
+lungscan3d <command> key=value group=value group.key=value
+```
+
+Примеры:
+
+```bash
+lungscan3d show-config data=luna16 model=resnet3d_se logging.mode=none
+lungscan3d train data=luna16 trainer.max_epochs=30 data.batch_size=64 logging.mode=tensorboard
+lungscan3d export-onnx data=luna16 infer.checkpoint_path=artifacts/checkpoints/best.ckpt infer.onnx_path=artifacts/onnx/lungscan3d.onnx
+```
+
+То же самое можно выполнить без активации `.venv`, если явно обернуть entrypoint через `uv run`:
+
+```bash
+uv run lungscan3d train data=luna16 trainer.max_epochs=30 logging.mode=none
+```
+
+Список команд:
 
 ```text
-dist/lungscan3d-0.1.0-py3-none-any.whl
-dist/lungscan3d-0.1.0.tar.gz
+show-config         вывести итоговый Hydra config
+download-data       подготовить данные согласно data=...
+download-luna16     скачать metadata/subset архивы LUNA16
+preprocess          сделать preprocessing
+train               обучить модель
+infer               локальный inference по .npy patch
+optimize-threshold  подобрать threshold на val/test
+export-onnx         экспортировать checkpoint в ONNX
+export-tensorrt     собрать TensorRT plan через trtexec
+triton-client       вызвать Triton HTTP endpoint
+dvc-add             dvc add для target из dvc.target
+dvc-pull            dvc pull для target/remote из dvc.*
+dvc-push            dvc push для target/remote из dvc.*
+self-test           smoke-проверка synthetic → train → ONNX → TensorRT dry-run → pytest
 ```
 
-## 4.5. Установка собранного пакета
+## 2.4. Быстрый smoke test без LUNA16
 
-В чистом окружении:
+Этот сценарий ничего не скачивает из LUNA16. Он проверяет, что пакет установлен, CLI работает, synthetic data создаётся, модель обучается, ONNX экспортируется, TensorRT-команда собирается, Triton repository имеет ожидаемую структуру, а тесты проходят.
 
 ```bash
-python -m venv .venv-prod
-source .venv-prod/bin/activate
-uv pip install dist/lungscan3d-0.1.0-py3-none-any.whl
+lungscan3d self-test
 ```
 
-Можно использовать и обычный `pip install`, но в проекте предпочтительно использовать `uv pip install`, чтобы оставаться в одном tooling-стеке.
-
-Проверка установленной CLI-команды:
+Более быстрый режим без запуска pytest внутри self-test:
 
 ```bash
-lungscan3d show-config
+lungscan3d self-test self_test.run_pytest=false
 ```
 
-## 4.6. Установка pre-commit
+Отдельно можно прогнать обычный набор тестов:
 
 ```bash
-pre-commit install
-pre-commit run -a
+pytest
 ```
 
----
+## 2.5. Скачивание LUNA16
 
-# 5. Конфигурация проекта
-
-Проект использует Hydra. Главная точка входа:
-
-```text
-configs/config.yaml
-```
-
-Переопределение параметров выполняется через CLI:
+Полный LUNA16 большой, поэтому для первого запуска обычно берут один subset:
 
 ```bash
-lungscan3d train trainer.max_epochs=5 data=synthetic
+lungscan3d download-luna16 data=luna16 data.download_subsets=[0]
 ```
 
-Выбор LUNA16-режима:
+Несколько subset:
 
 ```bash
-lungscan3d train data=luna16
+lungscan3d download-luna16 data=luna16 data.download_subsets=[0,1,2]
 ```
 
-Быстрый smoke-test:
+Первые N subset:
 
 ```bash
-lungscan3d train data=synthetic trainer.max_epochs=3
+lungscan3d download-luna16 data=luna16 data.download_max_subsets=3
 ```
 
----
-
-# 6. Управление данными через DVC
-
-## 6.1. DVC-команды через пакет
-
-Для удобства основные DVC-операции обёрнуты в CLI пакета:
+Только metadata без архивов subset не является полноценным датасетом для обучения, но удобно для проверки доступа:
 
 ```bash
-lungscan3d dvc-pull
-lungscan3d dvc-pull --target=data/processed/luna16 --remote=data_storage
-lungscan3d dvc-push --target=artifacts/onnx/lungscan3d.onnx --remote=model_storage
+lungscan3d download-luna16 data=luna16 data.download_metadata=true data.download_max_subsets=0
 ```
-
-Если нужно выполнить расширенную DVC-операцию, можно использовать обычный `dvc` напрямую, но базовый пользовательский сценарий покрыт командами пакета.
-
-## 6.2. Remote storage
-
-```text
-data_storage  — для данных
-model_storage — для моделей и production-артефактов
-```
-
----
-
-# 7. Получение LUNA16
-
-## 7.1. Рекомендуемый вариант
-
-Полный LUNA16 занимает десятки гигабайт. Поэтому безопасный и воспроизводимый сценарий такой:
-
-1. для CI и проверки использовать `data=synthetic`;
-2. для реального обучения скачать LUNA16 вручную или через CLI-утилиту;
-3. после подготовки данных добавить processed-артефакты в DVC.
-
-## 7.2. Автоматическая загрузка через пакет
-
-В пакет добавлена команда:
-
-```bash
-lungscan3d download-luna16
-```
-
-По умолчанию она скачивает все 10 subset-архивов и metadata. Это большой объём данных, поэтому для разработки лучше ограничить число частей.
-
-Скачать только metadata и `subset0`:
-
-```bash
-lungscan3d download-luna16 --subsets=0
-```
-
-Скачать первые две части:
-
-```bash
-lungscan3d download-luna16 --max-subsets=2
-```
-
-Скачать конкретные части:
-
-```bash
-lungscan3d download-luna16 --subsets=0,3,7
-```
-
-Скачать архивы, распаковать и удалить zip-файлы после распаковки:
-
-```bash
-lungscan3d download-luna16 --subsets=0 --extract=True --keep-archives=False
-```
-
-Назначение параметров:
-
-| Параметр             | Значение                                             |
-| -------------------- | ---------------------------------------------------- |
-| `--raw-dir`          | куда положить данные, по умолчанию `data/raw/luna16` |
-| `--subsets`          | список subset ids через запятую, например `0,1,2`    |
-| `--max-subsets`      | скачать первые N subset-архивов                      |
-| `--include-metadata` | скачать `annotations.csv` и `candidates.csv`         |
-| `--extract`          | распаковать zip-архивы                               |
-| `--keep-archives`    | оставить zip после распаковки                        |
-| `--overwrite`        | перекачать существующие файлы                        |
-
-Команда скачивает архивы с Zenodo и распаковывает их в структуру:
+Ожидаемая структура после скачивания:
 
 ```text
 data/raw/luna16/
-├── subset0/
-├── subset1/
-├── ...
 ├── annotations.csv
-└── candidates.csv
+├── candidates.csv
+├── subset0.zip
+├── subset0/
+│   ├── *.mhd
+│   └── *.raw
+└── ...
 ```
 
-## 7.3. Ручная загрузка
+## 2.6. DVC workflow
 
-Если автоматическая загрузка нежелательна, можно скачать данные вручную:
-
-1. открыть страницу LUNA16 на Grand Challenge или Zenodo;
-2. скачать `annotations.csv`, `candidates.csv` и нужные `subset*.zip`;
-3. распаковать архивы в `data/raw/luna16/`;
-4. проверить структуру:
+Если данные или processed artifacts уже лежат в DVC remote:
 
 ```bash
-find data/raw/luna16 -maxdepth 2 -type f | head
+lungscan3d dvc-pull dvc.target=data/processed/luna16
+lungscan3d dvc-pull dvc.target=data/processed/luna16 dvc.remote=data_storage
 ```
 
----
-
-# 8. Обучение модели
-
-ВАЖНО! Перед началом обучения необходимо поднять MLFlow сервер
+Добавить processed dataset в DVC:
 
 ```bash
-mlflow server --host 127.0.0.1 --port 8080
+lungscan3d dvc-add dvc.target=data/processed/luna16
+lungscan3d dvc-push dvc.target=data/processed/luna16 dvc.remote=data_storage
 ```
 
-## 8.1. Быстрая проверка на synthetic dataset
+DVC stage из `dvc.yaml` запускает preprocessing так же через entrypoint пакета:
 
 ```bash
-lungscan3d train data=synthetic trainer.max_epochs=3
+dvc repro preprocess_luna16
 ```
 
-Этот режим нужен для автоматической проверки:
+## 2.7. Препроцессинг LUNA16
 
-- пакет импортируется;
-- DataModule работает;
-- модель делает forward pass;
-- loss считается;
-- training loop запускается;
-- loss должен снижаться на простом synthetic signal.
-
-## 8.2. Препроцессинг LUNA16
+Препроцессинг читает `candidates.csv`, ищет соответствующие `*.mhd`, нормализует HU, вырезает patch вокруг кандидата и сохраняет chunked dataset:
 
 ```bash
 lungscan3d preprocess data=luna16
 ```
 
-Если нужно скачать только `subset0` перед препроцессингом:
-
-```bash
-lungscan3d download-luna16 --subsets=0
-lungscan3d preprocess data=luna16
-```
-
-## 8.3. Обучение baseline на LUNA16
-
-```bash
-lungscan3d train data=luna16 model=dlwpt_baseline loss=bce trainer.max_epochs=20
-```
-
-## 8.4. Обучение улучшенной модели
-
-```bash
-lungscan3d train data=luna16 model=resnet3d_se loss=focal trainer.max_epochs=50
-```
-
-## 8.5. Что пользователь видит в логах
-
-Через стандартный `logging` выводятся этапы:
-
-- загрузка/проверка данных;
-- DVC pull/push;
-- скачивание LUNA16;
-- распаковка архивов;
-- начало препроцессинга;
-- количество найденных CT-файлов;
-- количество обработанных кандидатов;
-- создание train/val/test split;
-- запуск обучения;
-- путь к лучшему checkpoint;
-- сохранение графиков;
-- экспорт ONNX/TensorRT;
-- результат инференса.
-
-Пример:
+Результат:
 
 ```text
-2026-05-22 12:00:01 | INFO | lungscan3d.training.train | Starting training: project=lungscan3d, data=synthetic, model=dlwpt_baseline
-2026-05-22 12:00:02 | INFO | lungscan3d.data.download | Synthetic dataset saved: volumes=data/processed/synthetic/volumes.npy
-2026-05-22 12:00:03 | INFO | lungscan3d.data.datamodule | Dataset split sizes: train=134, val=28, test=30
+data/processed/luna16/
+├── labels.npy
+├── manifest.csv
+└── chunks/
+    ├── volumes_000000.npy
+    ├── labels_000000.npy
+    ├── volumes_000001.npy
+    └── labels_000001.npy
 ```
 
----
+`manifest.csv` содержит `seriesuid`, `chunk_index`, `local_index`, пути к chunk-файлам и label. Это важно для lazy loading и patient-level split.
 
-# 9. Логирование экспериментов
+Во время препроцессинга есть progress bar по строкам `candidates.csv`. Chunk size по умолчанию уменьшен до `256`, чтобы держать RAM в районе 12 GB даже на обычной рабочей станции.
 
-## 9.1. MLflow
-
-Локальный запуск MLflow:
+Примеры настройки:
 
 ```bash
-mlflow server --host 127.0.0.1 --port 8080
+lungscan3d preprocess data=luna16 preprocessing.chunk_size=128
+lungscan3d preprocess data=luna16 data.patch_size=[32,48,48] preprocessing.max_cached_ct_volumes=1
+lungscan3d preprocess data=luna16 preprocessing.progress=false
 ```
 
-Обучение:
+## 2.8. Patient-level split и lazy loading
+
+Для LUNA16 по умолчанию включено:
+
+```yaml
+data.split_by_patient: true
+data.group_column: seriesuid
+```
+
+Это означает, что split делается не по отдельным patch, а по `seriesuid`. Один CT/patient не может оказаться одновременно в train и validation/test. Это сохраняется и при lazy loading, потому что lazy dataset получает уже готовые global indices, построенные на основе `manifest.csv`.
+
+При `data.save_splits=true` split-файлы сохраняются в:
+
+```text
+data/splits/luna16/
+├── train_idx.npy
+├── val_idx.npy
+├── test_idx.npy
+└── groups.json
+```
+## 2.9. Рекомендованные ресурсы и дефолты LUNA16
+
+Дефолты подобраны под ориентир: около 12 GB RAM и 16 GB GPU VRAM.
+
+| Сценарий | patch size | chunk size | batch size | RAM | GPU VRAM | Комментарий |
+|---|---:|---:|---:|---:|---:|---|
+| smoke/debug | `[16,16,16]` | 64 | 8–32 | 2–4 GB | 2–4 GB | Быстрые проверки, не для качества |
+| workstation default | `[32,48,48]` | 256 | 64 | ~8–12 GB | ~10–16 GB | Дефолт проекта для LUNA16 |
+| осторожный режим | `[32,48,48]` | 128 | 32 | ~6–10 GB | ~8–12 GB | Если есть OOM на CPU/GPU |
+| крупнее patch | `[48,64,64]` | 64–128 | 8–16 | 12–24 GB | 16–24+ GB | Только если нужна большая область вокруг кандидата |
+| ResNet3D-SE | `[32,48,48]` | 128–256 | 16–32 | ~8–12 GB | 12–16+ GB | Модель тяжелее baseline |
+
+Оценка памяти на один float32 patch:
+
+```text
+1 * D * H * W * 4 bytes
+[32,48,48] ≈ 0.28 MB на sample до активаций модели
+```
+
+На GPU основную память занимают не входы, а активации и градиенты. Если ловите CUDA OOM, уменьшайте параметры в таком порядке:
+
+1. `data.batch_size`
+2. `model.base_channels` или `model.conv_channels`
+3. `data.patch_size`
+4. `trainer.precision=16-mixed` при совместимой GPU
+
+## 2.10. Обучение
+
+По умолчанию логирование экспериментов отключено:
 
 ```bash
-lungscan3d train data=synthetic trainer.max_epochs=3
+lungscan3d train data=luna16 logging.mode=none
 ```
 
-В MLflow логируются:
-
-- train loss;
-- validation loss;
-- ROC-AUC;
-- PR-AUC;
-- Recall;
-- Precision;
-- F1-score;
-- hyperparameters;
-- git commit id;
-- checkpoints;
-- plots.
-
-## 9.2. TensorBoard
+MLflow:
 
 ```bash
-tensorboard --logdir lightning_logs
+scripts/run_mlflow.sh
+lungscan3d train data=luna16 logging.mode=mlflow
 ```
 
----
+MLflow UI по умолчанию:
 
-# 10. Подбор порога
+```text
+http://127.0.0.1:8080
+```
 
-После обучения:
+TensorBoard:
 
 ```bash
-lungscan3d optimize-threshold \
-  data=luna16 \
-  model=dlwpt_baseline \
-  checkpoint=artifacts/checkpoints/best.ckpt \
-  split=val
+scripts/run_tensorboard.sh
+lungscan3d train data=luna16 logging.mode=tensorboard
 ```
 
-Порог сохраняется в:
+TensorBoard UI по умолчанию:
+
+```text
+http://127.0.0.1:6006
+```
+
+Оба логгера сразу:
+
+```bash
+scripts/run_mlflow.sh
+scripts/run_tensorboard.sh
+lungscan3d train data=luna16 logging.mode=all
+```
+
+Конфигурация логгеров хранится в одном файле `configs/logging/default.yaml`. 
+
+```bash
+lungscan3d train data=luna16 \
+  logging.mode=mlflow \
+  logging.mlflow_tracking_uri=http://127.0.0.1:8080 \
+  logging.experiment_name=lungscan3d
+
+lungscan3d train data=luna16 \
+  logging.mode=tensorboard \
+  logging.tensorboard_save_dir=lightning_logs
+```
+
+Baseline:
+
+```bash
+lungscan3d train data=luna16 model=dlwpt_baseline trainer.max_epochs=30
+```
+
+ResNet3D-SE:
+
+```bash
+lungscan3d train data=luna16 model=resnet3d_se trainer.max_epochs=50 data.batch_size=32
+```
+
+Checkpoint сохраняется только один — лучший по `val/loss`:
+
+```text
+artifacts/checkpoints/best.ckpt
+```
+
+## 2.11. Подбор threshold
+
+```bash
+lungscan3d optimize-threshold data=luna16 infer.checkpoint_path=artifacts/checkpoints/best.ckpt postprocess.split=val
+```
+
+Результат сохраняется в:
 
 ```text
 artifacts/postprocessing/threshold.json
 ```
 
-Инференс автоматически использует этот файл, если включено:
+Управление стратегией:
 
-```yaml
-postprocess:
-  use_threshold_artifact: true
+```bash
+lungscan3d optimize-threshold data=luna16 postprocess.threshold_selection_metric=recall_at_min_precision postprocess.min_precision=0.5
 ```
 
----
+## 2.12. Локальный inference
 
-# 11. Инференс
+На вход нужен `.npy` patch формы `(1,D,H,W)` или batch `(B,1,D,H,W)`:
 
-## 11.1. Инференс по processed patch
+```bash
+lungscan3d infer data=luna16 infer.input_path=data/examples/sample_patch.npy infer.checkpoint_path=artifacts/checkpoints/best.ckpt
+```
 
-Формат входа:
+## 2.13. Экспорт в ONNX
+
+```bash
+lungscan3d export-onnx data=luna16 infer.checkpoint_path=artifacts/checkpoints/best.ckpt infer.onnx_path=artifacts/onnx/lungscan3d.onnx
+```
+
+Экспорт валидируется через `onnx.checker` и `onnxruntime`.
+
+## 2.14. Экспорт в TensorRT
+
+Сначала убедитесь, что ONNX есть:
+
+```bash
+lungscan3d export-onnx data=luna16
+```
+
+Затем TensorRT:
+
+```bash
+lungscan3d export-tensorrt data=luna16 tensorrt.engine_path=artifacts/tensorrt/lungscan3d.plan
+```
+
+Dynamic shapes задаются через Hydra:
+
+```bash
+lungscan3d export-tensorrt data=luna16 tensorrt.min_batch_size=1 tensorrt.opt_batch_size=16 tensorrt.max_batch_size=64 tensorrt.precision=fp16
+```
+
+Dry-run без запуска `trtexec`, удобно для CI:
+
+```bash
+lungscan3d export-tensorrt data=luna16 tensorrt.dry_run=true
+```
+
+После успешной сборки положите plan в Triton repository:
+
+```bash
+mkdir -p triton_model_repository/lungscan3d/1
+cp artifacts/tensorrt/lungscan3d.plan triton_model_repository/lungscan3d/1/model.plan
+```
+
+## 2.15. Triton Server
+
+В репозитории уже есть конфиг TensorRT backend:
 
 ```text
-.npy файл
-shape: (1, 32, 48, 48)
-dtype: float32
-```
-
-Команда:
-
-```bash
-lungscan3d infer data/examples/sample_patch.npy
-```
-
-Пример ответа:
-
-```json
-{
-  "probability": 0.873,
-  "threshold": 0.5,
-  "label": 1,
-  "class_name": "nodule"
-}
-```
-
----
-
-# 12. Экспорт модели в ONNX
-
-```bash
-lungscan3d export-onnx \
-  --checkpoint=artifacts/checkpoints/best.ckpt \
-  --output=artifacts/onnx/lungscan3d.onnx
-```
-
-После экспорта выполняются проверки:
-
-- `onnx.checker.check_model`;
-- smoke-test через `onnxruntime`.
-
-Добавление ONNX-артефакта в DVC:
-
-```bash
-lungscan3d dvc-add artifacts/onnx/lungscan3d.onnx
-lungscan3d dvc-push --target=artifacts/onnx/lungscan3d.onnx --remote=model_storage
-```
-
----
-
-# 13. Экспорт в TensorRT
-
-TensorRT export требует:
-
-- NVIDIA GPU;
-- CUDA;
-- установленный TensorRT;
-- доступный `trtexec`.
-
-```bash
-lungscan3d export-tensorrt --output=artifacts/tensorrt/lungscan3d.engine
-```
-
-Или shell-обёртка:
-
-```bash
-bash scripts/export_tensorrt.sh output=artifacts/tensorrt/lungscan3d.engine
-```
-
----
-
-# 14. Triton Inference Server
-
-Структура model repository:
-
-```text
-triton_model_repository/
-└── lungscan3d/
-    ├── config.pbtxt
-    └── 1/
-        └── model.onnx
-```
-
-Перед запуском:
-
-```bash
-cp artifacts/onnx/lungscan3d.onnx triton_model_repository/lungscan3d/1/model.onnx
+triton_model_repository/lungscan3d/config.pbtxt
 ```
 
 Запуск:
 
 ```bash
-bash scripts/run_triton.sh
+scripts/run_triton.sh
+```
+
+Адреса по умолчанию:
+
+```text
+HTTP:    localhost:8000
+gRPC:    localhost:8001
+metrics: localhost:8002
 ```
 
 Проверка клиента:
 
 ```bash
-lungscan3d triton-client data/examples/sample_patch.npy --url=localhost:8000
+lungscan3d triton-client triton.input_path=data/examples/sample_patch.npy triton.client_url=localhost:8000
 ```
 
----
+## 2.16. Полный workflow от данных до Triton
 
-# 15. Тестирование
-
-```bash
-pytest
-```
-
-С coverage:
+Минимальный LUNA16 workflow:
 
 ```bash
-pytest --cov=lungscan3d
-```
-
-Тестами покрываются:
-
-- dataset loading;
-- synthetic data generation;
-- preprocessing utilities;
-- coordinate conversion;
-- model forward pass;
-- loss functions;
-- postprocessing;
-- threshold optimization;
-- plot generation;
-- inference utilities.
-
----
-
-# 16. Качество кода
-
-Проверка:
-
-```bash
-ruff check .
-```
-
-Форматирование:
-
-```bash
-ruff format .
-```
-
-Полная проверка:
-
-```bash
-pre-commit run -a
-```
-
----
-
-# 17. Быстрый сценарий проверки проекта
-
-```bash
-git clone https://github.com/DimaAtamanov/lungscan3d.git
-cd lungscan3d
-
-uv sync --extra dev
+# 1. Установка
+uv sync --extra dev --extra triton
 source .venv/bin/activate
 
-pre-commit install
-pre-commit run -a
-pytest
+# 2. Скачивание одного subset для первого запуска
+lungscan3d download-luna16 data=luna16 data.download_subsets=[0]
 
-lungscan3d train data=synthetic trainer.max_epochs=3
-```
-
-Ожидаемый результат:
-
-- зависимости устанавливаются;
-- пакет доступен как CLI-команда `lungscan3d`;
-- pre-commit проходит;
-- тесты проходят;
-- обучение запускается;
-- loss снижается;
-- графики сохраняются в `plots/`;
-- метрики логируются;
-- ONNX экспортируется;
-- инференс возвращает JSON.
-
----
-
-# 18. Основные команды
-
-```bash
-# установка окружения разработки
-uv sync --extra dev
-source .venv/bin/activate
-
-# сборка пакета
-python -m build
-
-# хуки и тесты
-pre-commit install
-pre-commit run -a
-pytest
-
-# показать конфиг
-lungscan3d show-config
-
-# скачать LUNA16 subset0 и metadata
-lungscan3d download-luna16 --subsets=0
-
-# DVC
-lungscan3d dvc-pull
-lungscan3d dvc-add artifacts/onnx/lungscan3d.onnx
-lungscan3d dvc-push --remote=model_storage
-
-# smoke train
-lungscan3d train data=synthetic trainer.max_epochs=3
-
-# preprocess LUNA16
+# 3. Препроцессинг
 lungscan3d preprocess data=luna16
 
-# train LUNA16
-lungscan3d train data=luna16 model=dlwpt_baseline loss=bce
+# 4. При необходимости сохранить processed data в DVC
+lungscan3d dvc-add dvc.target=data/processed/luna16
+lungscan3d dvc-push dvc.target=data/processed/luna16
 
-# threshold optimization
-lungscan3d optimize-threshold data=luna16 checkpoint=artifacts/checkpoints/best.ckpt split=val
+# 5. Обучение без внешнего логирования
+lungscan3d train data=luna16 logging.mode=none trainer.max_epochs=30
 
-# infer
-lungscan3d infer data/examples/sample_patch.npy
+# 6. Подбор threshold
+lungscan3d optimize-threshold data=luna16 postprocess.split=val
 
-# export ONNX
-lungscan3d export-onnx
+# 7. ONNX
+lungscan3d export-onnx data=luna16
 
-# export TensorRT
-lungscan3d export-tensorrt
+# 8. TensorRT
+lungscan3d export-tensorrt data=luna16
 
-# run Triton
-bash scripts/run_triton.sh
+# 9. Triton model repository
+mkdir -p triton_model_repository/lungscan3d/1
+cp artifacts/tensorrt/lungscan3d.plan triton_model_repository/lungscan3d/1/model.plan
 
-# Triton client
-lungscan3d triton-client data/examples/sample_patch.npy
+# 10. Triton Server
+scripts/run_triton.sh
+
+# 11. Triton client
+lungscan3d triton-client triton.input_path=data/examples/sample_patch.npy
+```
+
+## 2.17. Таблица управляющих параметров
+
+Ниже перечислены параметры, которыми пользователь управляет через Hydra overrides. Формат:
+
+```bash
+lungscan3d <command> parameter=value
+```
+
+| Параметр | Дефолт | Где | Комментарий / допустимые значения |
+|---|---:|---|---|
+| `seed` | `42` | `configs/config.yaml` | Глобальная воспроизводимость |
+| `project_name` | `lungscan3d` | `configs/config.yaml` | Имя проекта для логгеров |
+| `paths.data_dir` | `data` | `configs/config.yaml` | Корень данных |
+| `paths.raw_dir` | `data/raw` | `configs/config.yaml` | Корень raw данных |
+| `paths.processed_dir` | `data/processed` | `configs/config.yaml` | Корень processed данных |
+| `paths.splits_dir` | `data/splits` | `configs/config.yaml` | Куда сохраняются split indices |
+| `paths.examples_dir` | `data/examples` | `configs/config.yaml` | Примеры `.npy` для inference |
+| `paths.artifacts_dir` | `artifacts` | `configs/config.yaml` | Корень артефактов |
+| `paths.plots_dir` | `plots` | `configs/config.yaml` | PNG-графики обучения |
+| `paths.checkpoints_dir` | `artifacts/checkpoints` | `configs/config.yaml` | Директория checkpoint |
+| `dvc.target` | `null` | `configs/config.yaml` | DVC target для `dvc-add/pull/push` |
+| `dvc.remote` | `null` | `configs/config.yaml` | DVC remote, например `data_storage` |
+| `self_test.run_pytest` | `true` | `configs/config.yaml` | Запускать ли pytest внутри `self-test` |
+| `self_test.pytest_args` | `['-q']` | `configs/config.yaml` | Аргументы pytest |
+| `data` | `synthetic` | Hydra defaults | Выбор data config: `synthetic`, `luna16` |
+| `data.name` | `synthetic` / `luna16` | `configs/data/*.yaml` | Имя датасета |
+| `data.num_samples` | `192` | `synthetic` | Количество synthetic samples |
+| `data.positive_fraction` | `0.35` | `synthetic` | Доля positive synthetic samples |
+| `data.raw_dir` | `data/raw/luna16` | `luna16` | Где лежит LUNA16 raw |
+| `data.candidates_csv` | `data/raw/luna16/candidates.csv` | `luna16` | CSV кандидатов |
+| `data.processed_dir` | `data/processed/luna16` | `luna16` | Processed LUNA16 output |
+| `data.patch_size` | `[32,48,48]` | `data` | `(D,H,W)` patch size |
+| `data.batch_size` | `8` synthetic, `64` LUNA16 | `data` | Batch size dataloader/training |
+| `data.num_workers` | `0` synthetic, `2` LUNA16 | `data` | Dataloader workers |
+| `data.train_fraction` | `0.7` | `data` | Train split fraction |
+| `data.val_fraction` | `0.15` | `data` | Validation split fraction |
+| `data.test_fraction` | `0.15` | `data` | Test split fraction |
+| `data.split_by_patient` | `false` synthetic, `true` LUNA16 | `data` | Делить по patient/seriesuid |
+| `data.group_column` | `seriesuid` | `data` | Колонка группировки в manifest |
+| `data.save_splits` | `true` | `data` | Сохранять split indices |
+| `data.ensure_data` | `true` | `data` | Автоматически готовить данные перед train |
+| `data.task` | `nodule_vs_non_nodule` | `luna16` | Текущая постановка задачи |
+| `data.dvc_target` | `data/processed/luna16` | `luna16` | DVC target для авто-восстановления |
+| `data.allow_internet_download` | `true` | `luna16` | Разрешить download из Zenodo |
+| `data.download_subsets` | `null` | `luna16` | Явный список subset, например `[0,1,2]` |
+| `data.download_max_subsets` | `1` | `luna16` | Скачать первые N subset |
+| `data.download_metadata` | `true` | `luna16` | Скачать `annotations.csv`, `candidates.csv` |
+| `data.extract_archives` | `true` | `luna16` | Распаковывать zip |
+| `data.keep_archives` | `true` | `luna16` | Оставлять zip после распаковки |
+| `data.overwrite_downloads` | `false` | `luna16` | Перекачивать/перераспаковывать |
+| `data.weighted_sampling.enabled` | `true` | `data` | WeightedRandomSampler для дисбаланса |
+| `preprocessing.spacing_mm` | `[1.0,1.0,1.0]` | preprocessing | Целевой spacing; сейчас справочный параметр |
+| `preprocessing.clip_hu_min` | `-1000.0` | preprocessing | Нижний HU clipping |
+| `preprocessing.clip_hu_max` | `400.0` | preprocessing | Верхний HU clipping |
+| `preprocessing.normalize_to` | `[-1.0,1.0]` | preprocessing | Диапазон нормализации |
+| `preprocessing.chunk_size` | `256` | preprocessing | Samples per chunk при preprocessing |
+| `preprocessing.cache_processed_patches` | `true` | preprocessing | Флаг совместимости; chunked format всегда disk-backed |
+| `preprocessing.max_cached_ct_volumes` | `1` | preprocessing | Сколько CT volume держать в RAM |
+| `preprocessing.progress` | `true` | preprocessing | Показывать progress bars |
+| `preprocessing.augment.enabled` | `true` | preprocessing | Включить train augmentations |
+| `preprocessing.augment.random_flip` | `true` | preprocessing | Случайные flip по осям |
+| `preprocessing.augment.random_rotate90` | `true` | preprocessing | Случайные повороты на 90° |
+| `preprocessing.augment.gaussian_noise_std` | `0.02` | preprocessing | Std гауссова шума |
+| `preprocessing.augment.random_shift_voxels` | `2` | preprocessing | Случайный shift в voxel |
+| `model` | `dlwpt_baseline` | Hydra defaults | Выбор модели: `dlwpt_baseline`, `resnet3d_se` |
+| `model.name` | `dlwpt_baseline` | model | Имя архитектуры |
+| `model.in_channels` | `1` | model | Каналов входного CT patch |
+| `model.conv_channels` | `8` | dlwpt_baseline | Ширина baseline CNN |
+| `model.patch_size` | `${data.patch_size}` | dlwpt_baseline | Patch size модели |
+| `model.expected_patch_size` | `[32,48,48]` | dlwpt_baseline | Проверка ожидаемой формы |
+| `model.spacing_mm` | `[1.0,1.0,1.0]` | dlwpt_baseline | Metadata/совместимость |
+| `model.clip_hu_min` | `-1000.0` | dlwpt_baseline | Metadata/совместимость |
+| `model.clip_hu_max` | `400.0` | dlwpt_baseline | Metadata/совместимость |
+| `model.normalize_to` | `[-1.0,1.0]` | dlwpt_baseline | Metadata/совместимость |
+| `model.cache_processed_patches` | `true` | dlwpt_baseline | Metadata/совместимость |
+| `model.base_channels` | `16` | resnet3d_se | Ширина ResNet3D-SE |
+| `model.blocks_per_stage` | `[2,2,2]` | resnet3d_se | Количество блоков по стадиям |
+| `model.se_reduction` | `8` | resnet3d_se | Reduction в SE блоках |
+| `model.dropout` | `0.25` | resnet3d_se | Dropout |
+| `model.local_crop_fraction` | `0.5` | resnet3d_se | Доля local crop, если используется моделью |
+| `model.augment.random_flip` | `true` | resnet3d_se | Модельный augmentation-флаг совместимости |
+| `model.augment.random_rotate90` | `true` | resnet3d_se | Модельный augmentation-флаг совместимости |
+| `model.augment.gaussian_noise_std` | `0.02` | resnet3d_se | Модельный augmentation-флаг совместимости |
+| `model.augment.random_shift_voxels` | `2` | resnet3d_se | Модельный augmentation-флаг совместимости |
+| `loss` | `bce` | Hydra defaults | Выбор loss: `bce`, `focal` |
+| `loss.name` | `bce` / `focal` | loss | Тип loss |
+| `loss.pos_weight` | `null` | loss | Positive class weight или auto/число, если реализовано |
+| `loss.alpha` | `0.75` | focal | Alpha focal loss |
+| `loss.gamma` | `2.0` | focal | Gamma focal loss |
+| `loss.focal_weight` | `1.0` | focal | Вес focal компоненты |
+| `loss.bce_weight` | `0.25` | focal | Вес BCE компоненты |
+| `trainer.max_epochs` | `5` | trainer | Epoch count |
+| `trainer.learning_rate` | `0.0003` | trainer | Learning rate |
+| `trainer.weight_decay` | `0.0001` | trainer | Weight decay |
+| `trainer.accelerator` | `auto` | trainer | `auto`, `cpu`, `gpu` |
+| `trainer.devices` | `auto` | trainer | `auto`, `1`, `[0]`, etc. |
+| `trainer.precision` | `32` | trainer | `32`, `16-mixed`, `bf16-mixed` |
+| `trainer.gradient_clip_val` | `1.0` | trainer | Gradient clipping |
+| `trainer.log_every_n_steps` | `1` | trainer | Частота train logging |
+| `trainer.num_sanity_val_steps` | `0` | trainer | Sanity validation steps |
+| `trainer.fast_dev_run` | `false` | trainer | Быстрый dev-run Lightning |
+| `trainer.deterministic` | `false` | trainer | Deterministic kernels |
+| `trainer.benchmark` | `false` | trainer | CuDNN benchmark |
+| `logging` | `default` | Hydra defaults | Подключает единый файл `configs/logging/default.yaml` |
+| `logging.mode` | `none` | logging | Режим логирования |
+| `logging.mlflow_tracking_uri` | `http://127.0.0.1:8080` | logging | MLflow tracking URI |
+| `logging.mlflow_port` | `8080` | logging | Документированный порт MLflow UI |
+| `logging.experiment_name` | `lungscan3d` | logging | MLflow experiment |
+| `logging.log_git_commit` | `true` | logging | Логировать git commit |
+| `logging.log_hyperparameters` | `true` | logging | Логировать config |
+| `logging.tensorboard_save_dir` | `lightning_logs` | logging | TensorBoard logdir |
+| `logging.tensorboard_port` | `6006` | logging | Документированный порт TensorBoard UI |
+| `postprocess.threshold` | `0.35` | postprocess | Classification threshold |
+| `postprocess.threshold_artifact_path` | `artifacts/postprocessing/threshold.json` | postprocess | Файл подобранного threshold |
+| `postprocess.use_threshold_artifact` | `true` | postprocess | Читать threshold artifact при inference |
+| `postprocess.threshold_selection_metric` | `recall_at_min_precision` | postprocess | Стратегия подбора |
+| `postprocess.min_precision` | `0.5` | postprocess | Минимальная precision для стратегии |
+| `postprocess.min_recall` | `0.8` | postprocess | Минимальная recall, если стратегия использует |
+| `postprocess.split` | `val` | postprocess | `val` или `test` для threshold search |
+| `infer.checkpoint_path` | `artifacts/checkpoints/best.ckpt` | infer | Checkpoint для infer/export |
+| `infer.onnx_path` | `artifacts/onnx/lungscan3d.onnx` | infer | ONNX path |
+| `infer.input_path` | `null` | infer | `.npy` input для local infer |
+| `infer.output_name` | `logit` | infer | Имя ONNX/Triton output |
+| `infer.input_name` | `input` | infer | Имя ONNX/Triton input |
+| `infer.opset_version` | `17` | infer | ONNX opset |
+| `tensorrt.engine_path` | `artifacts/tensorrt/lungscan3d.plan` | tensorrt | TensorRT plan output |
+| `tensorrt.workspace_mb` | `4096` | tensorrt | Workspace memory pool MB |
+| `tensorrt.precision` | `fp16` | tensorrt | `fp32`, `fp16`, `int8` |
+| `tensorrt.min_batch_size` | `1` | tensorrt | Dynamic shape min batch |
+| `tensorrt.opt_batch_size` | `16` | tensorrt | Dynamic shape opt batch |
+| `tensorrt.max_batch_size` | `64` | tensorrt | Dynamic shape max batch |
+| `tensorrt.dry_run` | `false` | tensorrt | Не запускать `trtexec`, только собрать команду |
+| `tensorrt.trtexec_path` | `trtexec` | tensorrt | Путь к `trtexec` |
+| `tensorrt.extra_args` | `[]` | tensorrt | Дополнительные аргументы `trtexec` |
+| `triton.model_repository` | `triton_model_repository` | triton | Triton model repository |
+| `triton.model_name` | `lungscan3d` | triton | Triton model name |
+| `triton.input_path` | `null` | triton | `.npy` input для Triton client |
+| `triton.client_url` | `localhost:8000` | triton | HTTP endpoint Triton |
+| `triton.http_port` | `8000` | triton | HTTP port |
+| `triton.grpc_port` | `8001` | triton | gRPC port |
+| `triton.metrics_port` | `8002` | triton | Metrics port |
+| `triton.docker_image` | `nvcr.io/nvidia/tritonserver:24.05-py3` | triton | Docker image для сервера |
+
+## 2.18. Типовые проблемы
+
+### `trtexec` not found
+
+Установите TensorRT CLI на хост или запускайте экспорт в контейнере NVIDIA TensorRT. Python dependency `tensorrt` полезна для Python-интеграций, но production export в проекте выполняется через `trtexec`.
+
+### CUDA OOM
+
+Уменьшите:
+
+```bash
+data.batch_size=32
+```
+
+Если не помогло:
+
+```bash
+model=resnet3d_se model.base_channels=8
+```
+
+или уменьшите patch:
+
+```bash
+data.patch_size=[24,40,40]
+```
+
+### Слишком много RAM на preprocessing
+
+Уменьшите:
+
+```bash
+preprocessing.chunk_size=128 preprocessing.max_cached_ct_volumes=1
+```
+
+### Нет MLflow/TensorBoard UI
+
+Логирование в train и UI-сервер — разные процессы. Сначала поднимите UI:
+
+```bash
+scripts/run_mlflow.sh
+scripts/run_tensorboard.sh
+```
+
+Затем запускайте обучение с нужным режимом:
+
+```bash
+lungscan3d train logging.mode=all
 ```
