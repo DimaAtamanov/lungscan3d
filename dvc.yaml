@@ -3,9 +3,12 @@ stages:
     cmd: lungscan3d preprocess data=luna16
     deps:
       - data/raw/luna16
+      - configs/config.yaml
       - configs/data/luna16.yaml
       - configs/preprocessing/default.yaml
+      - lungscan3d/data/datamodule.py
+      - lungscan3d/data/dataset.py
       - lungscan3d/data/preprocessing.py
-      - lungscan3d/data/download.py
     outs:
       - data/processed/luna16
+      - data/splits/luna16

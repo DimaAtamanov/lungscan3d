@@ -139,5 +139,20 @@ checkpoints/
 .dvc/cache/
 dvc_storage/
 
+!data/raw/*.dvc
+!data/processed/*.dvc
+!data/splits/*.dvc
+!data/raw/.gitignore
+!data/processed/.gitignore
+!data/splits/.gitignore
+
+
+!data/raw/*.dvc
+!data/processed/*.dvc
+!data/splits/*.dvc
+!data/raw/.gitignore
+!data/processed/.gitignore
+!data/splits/.gitignore
+
 
 colab.ipynb
