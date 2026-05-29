@@ -495,7 +495,7 @@ lungscan3d/
 │   ├── model/                        # 3D baseline и ResNet3D-SE
 │   ├── postprocess/                  # threshold и подбор порога
 │   ├── preprocessing/                # HU clipping, patch size, chunking, progress
-│   ├── tensorrt/                     # trtexec, dynamic shapes, precision, engine path
+│   ├── tensorrt/                     # dynamic shapes, precision, engine path
 │   ├── trainer/                      # PyTorch Lightning trainer
 │   └── triton/                       # Triton repository/client/docker параметры
 ├── lungscan3d/
@@ -555,24 +555,8 @@ uv build
 
 Для TensorRT-конвертации есть две части:
 
-1. Python-зависимости проекта:
-
 ```bash
 uv sync --extra dev --extra triton --extra tensorrt
-```
-
-2. Системный NVIDIA TensorRT CLI `trtexec`. Python-пакет не всегда кладёт `trtexec` в `PATH`, поэтому проверка обязательна:
-
-```bash
-uv run python -c "import tensorrt; print(tensorrt.__version__)"
-nvidia-smi
-trtexec --version
-```
-
-Если `trtexec` отсутствует, установите TensorRT на хост или выполняйте экспорт в NVIDIA TensorRT container. Для Triton нужен Docker с NVIDIA Container Toolkit:
-
-```bash
-docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi
 ```
 
 Triton client-зависимости ставятся тем же способом:
@@ -612,7 +596,7 @@ train               обучить модель
 infer               локальный inference по .npy patch
 optimize-threshold  подобрать threshold на val/test
 export-onnx         экспортировать checkpoint в ONNX
-export-tensorrt     собрать TensorRT plan через trtexec
+export-tensorrt     собрать TensorRT plan
 triton-client       вызвать Triton HTTP endpoint
 dvc-add             dvc add для target из dvc.target
 dvc-pull            dvc pull для target/remote из dvc.*
@@ -1073,12 +1057,6 @@ Dynamic shapes задаются через Hydra:
 lungscan3d export-tensorrt data=luna16 tensorrt.min_batch_size=1 tensorrt.opt_batch_size=16 tensorrt.max_batch_size=64 tensorrt.precision=fp16
 ```
 
-Dry-run, удобно для CI:
-
-```bash
-lungscan3d export-tensorrt data=luna16 tensorrt.dry_run=true
-```
-
 После успешной сборки положите plan в Triton repository:
 
 ```bash
@@ -1287,9 +1265,6 @@ lungscan3d <command> parameter=value
 | `tensorrt.min_batch_size`                   |                                       `1` | tensorrt              | Dynamic shape min batch                                |
 | `tensorrt.opt_batch_size`                   |                                      `16` | tensorrt              | Dynamic shape opt batch                                |
 | `tensorrt.max_batch_size`                   |                                      `64` | tensorrt              | Dynamic shape max batch                                |
-| `tensorrt.dry_run`                          |                                   `false` | tensorrt              | Не запускать `trtexec`, только собрать команду         |
-| `tensorrt.trtexec_path`                     |                                 `trtexec` | tensorrt              | Путь к `trtexec`                                       |
-| `tensorrt.extra_args`                       |                                      `[]` | tensorrt              | Дополнительные аргументы `trtexec`                     |
 | `triton.model_repository`                   |                 `triton_model_repository` | triton                | Triton model repository                                |
 | `triton.model_name`                         |                              `lungscan3d` | triton                | Triton model name                                      |
 | `triton.input_path`                         |                                    `null` | triton                | `.npy` input для Triton client                         |
@@ -1300,10 +1275,6 @@ lungscan3d <command> parameter=value
 | `triton.docker_image`                       |   `nvcr.io/nvidia/tritonserver:24.05-py3` | triton                | Docker image для сервера                               |
 
 ## 2.18. Типовые проблемы
-
-### `trtexec` not found
-
-Установите TensorRT CLI на хост или запускайте экспорт в контейнере NVIDIA TensorRT. Python dependency `tensorrt` полезна для Python-интеграций, но production export в проекте выполняется через `trtexec`.
 
 ### CUDA OOM
 

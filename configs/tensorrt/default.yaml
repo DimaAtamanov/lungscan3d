@@ -4,4 +4,3 @@ precision: fp16
 min_batch_size: 1
 opt_batch_size: 16
 max_batch_size: 64
-dry_run: false
