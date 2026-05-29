@@ -495,7 +495,7 @@ lungscan3d/
 │   ├── model/                        # 3D baseline и ResNet3D-SE
 │   ├── postprocess/                  # threshold и подбор порога
 │   ├── preprocessing/                # HU clipping, patch size, chunking, progress
-│   ├── tensorrt/                     # trtexec, dynamic shapes, precision, engine path
+│   ├── tensorrt/                     # dynamic shapes, precision, engine path
 │   ├── trainer/                      # PyTorch Lightning trainer
 │   └── triton/                       # Triton repository/client/docker параметры
 ├── lungscan3d/
@@ -555,24 +555,8 @@ uv build
 
 Для TensorRT-конвертации есть две части:
 
-1. Python-зависимости проекта:
-
 ```bash
 uv sync --extra dev --extra triton --extra tensorrt
-```
-
-2. Системный NVIDIA TensorRT CLI `trtexec`. Python-пакет не всегда кладёт `trtexec` в `PATH`, поэтому проверка обязательна:
-
-```bash
-uv run python -c "import tensorrt; print(tensorrt.__version__)"
-nvidia-smi
-trtexec --version
-```
-
-Если `trtexec` отсутствует, установите TensorRT на хост или выполняйте экспорт в NVIDIA TensorRT container. Для Triton нужен Docker с NVIDIA Container Toolkit:
-
-```bash
-docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi
 ```
 
 Triton client-зависимости ставятся тем же способом:
@@ -612,7 +596,7 @@ train               обучить модель
 infer               локальный inference по .npy patch
 optimize-threshold  подобрать threshold на val/test
 export-onnx         экспортировать checkpoint в ONNX
-export-tensorrt     собрать TensorRT plan через trtexec
+export-tensorrt     собрать TensorRT plan
 triton-client       вызвать Triton HTTP endpoint
 dvc-add             dvc add для target из dvc.target
 dvc-pull            dvc pull для target/remote из dvc.*
@@ -681,24 +665,189 @@ data/raw/luna16/
 
 ## 2.6. DVC workflow
 
-Если данные или processed artifacts уже лежат в DVC remote:
+В проекте DVC используется в двух режимах:
+
+1. **Pipeline mode** — для воспроизводимого preprocessing через `dvc.yaml`.
+2. **Standalone mode** — для больших артефактов, которые не описаны в `dvc.yaml`: raw data, checkpoints, ONNX, TensorRT.
+
+Remote storage уже настроен в `.dvc/config`.
+
+Проверить доступные remote:
 
 ```bash
-lungscan3d dvc-pull dvc.target=data/processed/luna16
-lungscan3d dvc-pull dvc.target=data/processed/luna16 dvc.remote=data_storage
+dvc remote list
 ```
 
-Добавить processed dataset в DVC:
+Проверить состояние DVC:
 
 ```bash
-lungscan3d dvc-add dvc.target=data/processed/luna16
-lungscan3d dvc-push dvc.target=data/processed/luna16 dvc.remote=data_storage
+dvc status
 ```
 
-DVC stage из `dvc.yaml` запускает preprocessing так же через entrypoint пакета:
+### Артефакты
+
+| Путь                                 | Что это                        | Режим DVC                    |
+| ------------------------------------ | ------------------------------ | ---------------------------- |
+| `data/raw/luna16`                    | исходный LUNA16 dataset        | standalone `dvc add`         |
+| `data/processed/luna16`              | preprocessed dataset           | pipeline output              |
+| `data/splits/luna16`                 | train/val/test splits          | pipeline output              |
+| `artifacts/checkpoints/best.ckpt`    | checkpoint модели              | standalone `dvc add`         |
+| `artifacts/onnx/lungscan3d.onnx`     | ONNX-модель                    | standalone `dvc add`         |
+| `artifacts/tensorrt/lungscan3d.plan` | TensorRT engine                | standalone `dvc add`         |
+| `artifacts/thresholds/*.json`        | threshold / inference metadata | standalone `dvc add` или Git |
+
+### Pipeline mode
+
+Pipeline mode используется только для preprocessing. Запустить preprocessing:
 
 ```bash
 dvc repro preprocess_luna16
+```
+
+Загрузить результаты preprocessing в remote:
+
+```bash
+dvc push -r data_storage
+```
+
+Скачать результаты preprocessing из remote:
+
+```bash
+dvc pull data/processed/luna16 -r data_storage
+dvc pull data/splits/luna16 -r data_storage
+```
+
+Если output стадии был изменён вручную и нужно обновить DVC metadata без повторного запуска:
+
+```bash
+dvc commit -f data/processed/luna16
+dvc commit -f data/splits/luna16
+dvc push -r data_storage
+```
+
+ВАЖНО! Не использовать для pipeline outputs:
+
+```bash
+dvc add data/processed/luna16
+dvc add data/splits/luna16
+```
+
+### Standalone mode
+
+Standalone mode используется для артефактов, которые не описаны в `dvc.yaml`
+
+#### Raw data
+
+Скачать raw data:
+
+```bash
+lungscan3d download-luna16 \
+  data=luna16 \
+  data.download_metadata=true \
+  data.download_max_subsets=1
+```
+
+Добавить raw data в DVC:
+
+```bash
+dvc add data/raw/luna16
+dvc push -r data_storage data/raw/luna16.dvc
+```
+
+Скачать raw data из remote:
+
+```bash
+dvc pull data/raw/luna16.dvc -r data_storage
+```
+
+#### Checkpoint
+
+Запустить обучение:
+
+```bash
+lungscan3d train data=luna16
+```
+
+Добавить checkpoint в DVC:
+
+```bash
+dvc add artifacts/checkpoints/best.ckpt
+dvc push -r model_storage artifacts/checkpoints/best.ckpt.dvc
+```
+
+Скачать checkpoint из remote:
+
+```bash
+dvc pull artifacts/checkpoints/best.ckpt.dvc -r model_storage
+```
+
+После нового обучения обновить checkpoint:
+
+```bash
+dvc add artifacts/checkpoints/best.ckpt
+dvc push -r model_storage artifacts/checkpoints/best.ckpt.dvc
+```
+
+#### ONNX
+
+Экспортировать ONNX:
+
+```bash
+lungscan3d export-onnx \
+  data=luna16 \
+  infer.checkpoint_path=artifacts/checkpoints/best.ckpt \
+  infer.onnx_path=artifacts/onnx/lungscan3d.onnx
+```
+
+Добавить ONNX в DVC:
+
+```bash
+dvc add artifacts/onnx/lungscan3d.onnx
+dvc push -r model_storage artifacts/onnx/lungscan3d.onnx.dvc
+```
+
+Скачать ONNX из remote:
+
+```bash
+dvc pull artifacts/onnx/lungscan3d.onnx.dvc -r model_storage
+```
+
+#### TensorRT
+
+Экспортировать TensorRT engine:
+
+```bash
+lungscan3d export-tensorrt \
+  infer.onnx_path=artifacts/onnx/lungscan3d.onnx \
+  tensorrt.engine_path=artifacts/tensorrt/lungscan3d.plan
+```
+
+Добавить TensorRT engine в DVC:
+
+```bash
+dvc add artifacts/tensorrt/lungscan3d.plan
+dvc push -r model_storage artifacts/tensorrt/lungscan3d.plan.dvc
+```
+
+Скачать TensorRT engine из remote:
+
+```bash
+dvc pull artifacts/tensorrt/lungscan3d.plan.dvc -r model_storage
+```
+
+#### Threshold artifacts
+
+Если threshold JSON хранится через DVC:
+
+```bash
+dvc add artifacts/thresholds/luna16_threshold.json
+dvc push -r model_storage artifacts/thresholds/luna16_threshold.json.dvc
+```
+
+Скачать threshold artifact:
+
+```bash
+dvc pull artifacts/thresholds/luna16_threshold.json.dvc -r model_storage
 ```
 
 ## 2.7. Препроцессинг LUNA16
@@ -906,12 +1055,6 @@ Dynamic shapes задаются через Hydra:
 
 ```bash
 lungscan3d export-tensorrt data=luna16 tensorrt.min_batch_size=1 tensorrt.opt_batch_size=16 tensorrt.max_batch_size=64 tensorrt.precision=fp16
-```
-
-Dry-run без запуска `trtexec`, удобно для CI:
-
-```bash
-lungscan3d export-tensorrt data=luna16 tensorrt.dry_run=true
 ```
 
 После успешной сборки положите plan в Triton repository:
@@ -1122,9 +1265,6 @@ lungscan3d <command> parameter=value
 | `tensorrt.min_batch_size`                   |                                       `1` | tensorrt              | Dynamic shape min batch                                |
 | `tensorrt.opt_batch_size`                   |                                      `16` | tensorrt              | Dynamic shape opt batch                                |
 | `tensorrt.max_batch_size`                   |                                      `64` | tensorrt              | Dynamic shape max batch                                |
-| `tensorrt.dry_run`                          |                                   `false` | tensorrt              | Не запускать `trtexec`, только собрать команду         |
-| `tensorrt.trtexec_path`                     |                                 `trtexec` | tensorrt              | Путь к `trtexec`                                       |
-| `tensorrt.extra_args`                       |                                      `[]` | tensorrt              | Дополнительные аргументы `trtexec`                     |
 | `triton.model_repository`                   |                 `triton_model_repository` | triton                | Triton model repository                                |
 | `triton.model_name`                         |                              `lungscan3d` | triton                | Triton model name                                      |
 | `triton.input_path`                         |                                    `null` | triton                | `.npy` input для Triton client                         |
@@ -1135,10 +1275,6 @@ lungscan3d <command> parameter=value
 | `triton.docker_image`                       |   `nvcr.io/nvidia/tritonserver:24.05-py3` | triton                | Docker image для сервера                               |
 
 ## 2.18. Типовые проблемы
-
-### `trtexec` not found
-
-Установите TensorRT CLI на хост или запускайте экспорт в контейнере NVIDIA TensorRT. Python dependency `tensorrt` полезна для Python-интеграций, но production export в проекте выполняется через `trtexec`.
 
 ### CUDA OOM
 

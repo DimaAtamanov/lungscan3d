@@ -242,11 +242,11 @@ def preprocess_candidate_csv(
                 metadata=chunk_metadata,
             )
         )
-        LOGGER.info(
-            "Wrote preprocessing chunk %06d with %d samples",
-            chunk_index,
-            len(chunk_volumes),
-        )
+        # LOGGER.info(
+        #     "Wrote preprocessing chunk %06d with %d samples",
+        #     chunk_index,
+        #     len(chunk_volumes),
+        # )
 
     if not all_labels:
         raise ValueError("No training samples were produced from the metadata CSV")
