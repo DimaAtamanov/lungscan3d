@@ -31,10 +31,6 @@ def export_tensorrt(config: Any, output: str | None = None) -> Path:
     engine_path = Path(output or config.tensorrt.engine_path)
     ensure_dir(engine_path.parent)
 
-    if bool(getattr(config.tensorrt, "dry_run", False)):
-        LOGGER.info("TensorRT dry-run enabled; engine build skipped")
-        return engine_path
-
     logger = trt.Logger(trt.Logger.INFO)
     builder = trt.Builder(logger)
 
@@ -82,7 +78,9 @@ def _configure_precision(
 
     if precision == "fp16":
         if not builder.platform_has_fast_fp16:
-            LOGGER.warning("FP16 requested, but fast FP16 is not reported by this platform")
+            LOGGER.warning(
+                "FP16 requested, but fast FP16 is not reported by this platform"
+            )
         builder_config.set_flag(trt.BuilderFlag.FP16)
         LOGGER.info("Using TensorRT FP16 precision")
         return
