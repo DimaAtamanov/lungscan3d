@@ -144,7 +144,9 @@ def _validate_triton_repository(model_repository: Path, model_name: str) -> None
     if not config_path.exists():
         raise FileNotFoundError(f"Triton config not found: {config_path}")
     if not version_dir.exists():
-        raise FileNotFoundError(f"Triton model version directory not found: {version_dir}")
+        raise FileNotFoundError(
+            f"Triton model version directory not found: {version_dir}"
+        )
     LOGGER.info("Triton repository layout looks valid: %s", model_dir)
 
 
@@ -168,13 +170,14 @@ def _run_self_test(config: DictConfig) -> None:
         "infer.onnx_path=artifacts/self_test/onnx/lungscan3d.onnx",
         "infer.checkpoint_path=artifacts/self_test/checkpoints/best.ckpt",
         "tensorrt.engine_path=artifacts/self_test/tensorrt/lungscan3d.plan",
-        "tensorrt.dry_run=true",
     ]
     download_data(_load_config(base_overrides))
     run_train(_load_config(base_overrides))
     export_onnx(_load_config(base_overrides))
     export_tensorrt(_load_config(base_overrides))
-    _validate_triton_repository(Path(config.triton.model_repository), str(config.triton.model_name))
+    _validate_triton_repository(
+        Path(config.triton.model_repository), str(config.triton.model_name)
+    )
 
     if bool(config.self_test.run_pytest):
         command = [sys.executable, "-m", "pytest", *list(config.self_test.pytest_args)]
